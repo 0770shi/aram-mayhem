@@ -81,9 +81,9 @@ input#q:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(10,200,185,.18)
 .item.core img{border-color:rgba(200,170,110,.65);box-shadow:0 0 0 1px rgba(200,170,110,.15),0 0 16px rgba(200,170,110,.12)}
 .item.alt img{border-color:rgba(167,139,250,.5)}
 .item .fallback{width:48px;min-height:48px;border-radius:10px;border:1px dashed var(--line);background:rgba(255,255,255,.04);font-size:.58rem;color:var(--muted);display:grid;place-items:center;padding:4px;text-align:center;line-height:1.2}
-.item .tipname{display:none;position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);background:rgba(8,12,22,.96);border:1px solid var(--line);color:var(--text);font-size:.72rem;padding:5px 8px;border-radius:8px;white-space:nowrap;z-index:5;pointer-events:none;box-shadow:var(--shadow)}
-.item:hover .tipname{display:block}
 .arrow{align-self:center;color:var(--muted);font-size:.85rem;opacity:.7;padding:0 2px}
+.skill,.item{cursor:help}
+.skill:focus-visible,.item:focus-visible{outline:1px solid rgba(10,200,185,.7);outline-offset:2px;border-radius:12px}
 
 footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem;line-height:1.7}
 .empty{text-align:center;color:var(--muted);padding:48px 12px;grid-column:1/-1}
@@ -128,11 +128,14 @@ footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);color:v
 .hex-legend .prio.must{background:#14532d;color:#bbf7d0;border-color:rgba(61,214,140,.55)}
 .hex-legend .prio.good{background:#134e4a;color:#99f6e4;border-color:rgba(10,200,185,.5)}
 .hex-legend .prio.avoid{background:#4c0519;color:#fecdd3;border-color:rgba(232,64,87,.5)}
-#hexFloatTip{display:none;position:fixed;left:0;top:0;z-index:99999;pointer-events:none;max-width:280px;width:max-content;background:rgba(8,12,22,.97);border:1px solid var(--line);color:var(--text);font-size:.72rem;padding:8px 10px;border-radius:10px;white-space:normal;text-align:left;line-height:1.45;box-shadow:var(--shadow)}
-#hexFloatTip.is-show{display:block}
-#hexFloatTip .t-name{font-weight:800;margin-bottom:2px}
-#hexFloatTip .t-meta{color:var(--muted);font-size:.62rem;margin-bottom:6px}
-#hexFloatTip .t-desc{color:#d7def0;white-space:pre-wrap}
+#floatTip{display:none;position:fixed;left:0;top:0;z-index:99999;pointer-events:none;max-width:360px;width:max-content;background:rgba(8,12,22,.97);border:1px solid var(--line);color:var(--text);font-size:.72rem;padding:8px 10px;border-radius:10px;white-space:normal;text-align:left;line-height:1.45;box-shadow:var(--shadow);overflow-y:auto;overflow-x:hidden;box-sizing:border-box}
+#floatTip.is-show{display:block}
+#floatTip.is-scroll{pointer-events:auto}
+#floatTip .t-name{font-weight:800;margin-bottom:2px}
+#floatTip .t-meta{color:var(--muted);font-size:.62rem;margin-bottom:6px}
+#floatTip .t-desc{color:#d7def0;white-space:pre-wrap}
+#floatTip::-webkit-scrollbar{width:6px}
+#floatTip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:4px}
 .hex-card{overflow:visible}
 .hex-catalog-grid{overflow:visible}
 .hex-board,.hex-rarity,.hex-row{overflow:visible}
@@ -193,6 +196,7 @@ body.mode-hex .drawer,body.mode-hex .overlay{display:none !important}
     <p><strong>声明：</strong>本页为参考推荐，非 Riot / 腾讯官方数据。海克斯为 <strong>26.22</strong> 最新版（发布 2026-11-04，图鉴统计 2026-11-08），实战请以当场三选一强化池为准。</p>
     <p>海克斯图标来自 Riot / Community Dragon；英雄、技能与装备图标来自 Data Dragon CDN（需联网加载）。已下线强化（如小丑学院、艾卡西亚的陷落、古式佳酿）未收录。</p>
     <p>海克斯效果说明含当前版本（26.22）的具体数值；将鼠标悬停在图标上（或在触屏上点按）即可查看完整效果。每个稀有度提供更多候选，方便遇到三选一全是彩色、金色或银色时挑选。推荐综合了英雄原有取舍与 arammayhem.com 的出场倾向，未标注胜率。出装会随版本变化，部分装备因改名可能无法匹配图标，将保留中文名显示。</p>
+    <p>技能与装备说明来自 Data Dragon 16.22.1 官方简体中文数据；悬停或点按图标可查看完整说明与数值。</p>
   </footer>
 </div>
 <div class="overlay" id="overlay"></div>
@@ -230,9 +234,721 @@ let hexRarity = "全部";
 let query = "";
 let viewMode = "heroes";
 let itemNameToId = Object.create(null);
+let itemById = Object.create(null);
 let itemReady = false;
 let itemHit = 0, itemMiss = 0;
 const skillCache = Object.create(null);
+
+const CDRAGON_PATCH = "16.22";
+const PASSIVE_TIPS = {"Jinx":"当一名英雄、一个史诗级野怪或一座建筑物在被金克丝造成伤害后的@AssistMarkerDuration@秒内被击杀或摧毁的话，金克丝就会获得不断衰减的<speed>@MSBuff@%移动速度</speed>和<attackSpeed>@ASBuff@%攻击速度</attackSpeed>，持续@BuffDuration@秒。<br><br>参与击杀英雄会使这个<attackSpeed>攻击速度</attackSpeed>叠加至多5次。","MissFortune":"在攻击一个新目标时，厄运小姐的攻击会造成额外的<physicalDamage>@TotalDamage@物理伤害</physicalDamage>。<br><br>触发<spellName>厄运的眷顾</spellName>时会使<spellName>大步流星</spellName>的冷却时间缩短@Spell.MissFortuneViciousStrikes:LoveTapRefund@秒。","Ezreal":"伊泽瑞尔的技能在命中时会为他提供<attackSpeed>@AttackSpeedPerStack.0*100@%攻击速度</attackSpeed>，持续@StackDuration@秒，至多可叠加@MaxStacks@层。","Caitlyn":"每攻击@AttacksPerHeadshot@次，凯特琳就会发射一次<keywordMajor>爆头</keywordMajor>。草丛中的攻击在积攒<keywordMajor>爆头</keywordMajor>次数时会算为@BrushAttackTotal@次。<br><br><keywordMajor>爆头</keywordMajor>造成额外的<physicalDamage>@HeadShotBonusDamage@物理伤害</physicalDamage>。爆头对被<spellName>90口径绳网</spellName>和<spellName>约德尔诱捕器</spellName>影响的敌人们拥有双倍距离。<keywordMajor>爆头</keywordMajor>对被<spellName>约德尔诱捕器</spellName>命中的敌人会造成额外的<physicalDamage>@spell.CaitlynW:HeadshotBonusDamage@物理伤害</physicalDamage>。","Ashe":"艾希的攻击和技能会施加持续@SlowDuration@秒的@SlowAmount@<status>减速</status>。攻击造成@DamageBonus@伤害。<br><br>艾希的暴击不会造成额外伤害，但会将【冰霜射击】的<status>减速</status>提升至@EmpoweredSlowAmount@，在持续时间内不断衰减。","Kaisa":"卡莎的攻击会叠加持续@PDuration@秒的<keywordMajor>电浆</keywordMajor>效果并造成额外的<magicDamage>@PBaseDamage@外加@PCurrentPerStackDamage@x层数的魔法伤害</magicDamage>。攻击一名带有@PMaxStacks@层效果的敌人将消耗<keywordMajor>电浆</keywordMajor>效果，造成<magicDamage>@PExecutePercentage@已损失生命值的魔法伤害</magicDamage>。附近的友军们会在<status>定身</status>敌方英雄时对其施加@PAllyStacks@层效果。<br><br>卡莎的战斗服会基于她的属性而进化她的基础技能。<br><spellName>艾卡西亚暴雨</spellName>：<physicalDamage>@f1.1@/@spell.KaisaQ:Effect6Amount@额外攻击力</physicalDamage><br><spellName>虚空索敌</spellName>：<scaleAP>@f2.1@/@spell.KaisaW:Effect2Amount@法术强度</scaleAP><br><spellName>极限超载</spellName>：<attackSpeed>@f3.1@%/@spell.KaisaE:Effect6Amount@%额外攻击速度</attackSpeed>","Xayah":"在使用一个技能后，霞的下@f14@次攻击将对沿途的所有目标造成@f16*100@%伤害并留下一支持续@f12@秒的<keywordMajor>羽毛</keywordMajor>。<br><br><spellName>情人跃：</spellName>洛和霞可以一起回城。","Jhin":"烬的手枪有着已被固定的攻击速度，并且在发射@MaxAmmo@次后就得重新装弹。第@MaxAmmo@颗子弹总会产生暴击并造成相当于目标<physicalDamage>@FourthShotExecutePercent@已损失生命值的额外物理伤害</physicalDamage>。<br><br>此外：<li>烬获得<physicalDamage>@TotalADPercent@额外攻击力</physicalDamage><li>烬的暴击造成的伤害减少@CritReductionPercent*100@%，但会为他提供<speed>@CritMoveSpeedPercent@移动速度</speed>，持续@HasteDuration@秒。<br><br>","Sivir":"希维尔在用攻击或技能对一名敌方英雄造成伤害时，会获得在@HasteDuration@秒<speed>@FlatMS@持续衰减的移动速度</speed>。","Twitch":"图奇的攻击会使目标感染毒液%i:OnHit% <OnHit>攻击特效</OnHit>，每秒造成<trueDamage>@DamagePerSecond@真实伤害</trueDamage>，持续@Duration@秒，最多可叠加@MaxStacks@层。<br><br>每秒最大伤害：@DamagePerSecondMax@","Varus":"韦鲁斯在每击杀一名敌人后，就会获得持续@ASDuration@秒的<attackSpeed>@MinionAS@攻击速度</attackSpeed>、<scaleAD>@MinionAD@攻击力</scaleAD>、和<scaleAP>@MinionAP@法术强度</scaleAP>。<br><br>参与击杀英雄后会使这个加成转而提供<attackSpeed>@ChampionAS@攻击速度</attackSpeed>(能够突破攻速上限)、<scaleAD>@ChampionAD@攻击力</scaleAD>、和<scaleAP>@ChampionAP@法术强度</scaleAP>。","Aphelios":"厄斐琉斯拥有5件由他妹妹拉露恩所制的皎月武器。他同一时间可以使用2件：1件主手武器和1件副手武器。每件武器都有1套独特的攻击和技能[@spell.ApheliosCalibrumQ:Hotkey@]。攻击和技能都会消耗该武器的弹药。在弹药耗尽后，厄斐琉斯会弃掉该武器，并且拉露恩会召唤下一件武器。<br><br>厄斐琉斯会在2级时解锁他武器的技能[@spell.ApheliosCalibrumQ:Hotkey@]并在6级时解锁他的终极技能。厄斐琉斯升级后获得的点数并非用于提升他的技能等级，而是用于为他提供永久属性。<br><br><passive>皎月武器顺序：</passive><li>{{ Spell_ApheliosP_GunShortDesc_@f1@ }}</li><li>{{ Spell_ApheliosP_GunShortDesc_@f2@ }}</li><font color='#424242'><li>{{ Spell_ApheliosP_GunShortDesc_@f3@ }}</li><li>{{ Spell_ApheliosP_GunShortDesc_@f4@ }}</li><li>{{ Spell_ApheliosP_GunShortDesc_@f5@ }}</li></font>","Samira":"莎弥拉可通过用不同的技能或攻击对敌方英雄造成伤害来构建一次连招。每个与前一个不同的技能或攻击都会提升她的<keywordMajor>评价等级</keywordMajor>，从E到S(一共6级)。每个评级会为莎弥拉提供<speed>@MSBonusNew@移动速度</speed>。<br><br>莎弥拉在近战距离的攻击和技能会造成额外的<magicDamage>@BonusMeleeDamage@魔法伤害</magicDamage>，基于目标的已损失生命值至多提升至<magicDamage>@EmpoweredMeleeDamageTooltip@</magicDamage>。<br><br>莎弥拉对被<status>定身</status>的敌人打出的攻击会使她突进到她的攻击距离处。如果敌人已被<status>击飞</status>，那么她还会使其保持<status>击飞</status>状态至少0.5秒。","Nilah":"当尼菈击杀一个小兵时，她和距她最近的那名友方英雄获得@ExperiencePercentage*100@%他们本该因分享击杀而正常损失的经验值。<br><br>尼菈在获得来自友方英雄技能提供的治疗和护盾时，会将<healing>治疗效能提升@HealingIncrease*100@%</healing>，将<shield>护盾效能提升@ShieldIncrease*100@%</shield>。如果一名友方英雄对她提供了治疗或护盾，那么该友方英雄自身也将获得相当于该提升数额的护盾和治疗。如果一名友方英雄对其自身提供了治疗或护盾，那么尼菈也将获得该额外效果。","KogMaw":"在阵亡后的@TooltipPassiveDuration@秒里，克格莫能够继续移动，能够无视单位碰撞体积，并且获得<speed>10%移动速度</speed>，在此期间持续提升至<speed>@TooltipPassiveMS*100@%移动速度</speed>。持续时间结束时，他会爆炸并对附近敌人造成<trueDamage>@PassiveDamage@真实伤害</trueDamage>。","Kalista":"<br><br><rules>卡莉丝塔的攻击无法被取消。<br>冲刺距离会随鞋子的品质而提升。</rules><br>","Zeri":"泽丽的攻击会被视为技能而非攻击，并且能够通过移动和施放<spellName>电火迸射</spellName>来充能。未充能的攻击会消耗少量充能，造成<magicDamage>@Spell.ZeriQ:MinDamage@魔法伤害</magicDamage> 并<danger>处决</danger>低于<attention>@Spell.ZeriQ:PassiveExecuteThreshold@生命值</attention>的敌人。一次完全充能的攻击造成<magicDamage>@Spell.ZeriQ:PassiveMaxDamage@ + @Spell.ZeriQ:PassiveMaxChargePercentHealth@最大生命值魔法伤害</magicDamage>并消耗所有充能。","Draven":"德莱文在每次击杀一个非英雄单位或防御塔、接住一把<keywordMajor>旋转飞斧</keywordMajor>时会获得@StackGain@层效果。<br><br>德莱文在击杀一名英雄后，会获得@PassiveGoldBase@+@PassiveGoldPerStack@x效果层数的金币。德莱文在阵亡时会损失@PercentOfStacksLost@%的层数。<br><br>已赚取的金币总和：<statTracking>@DravenPassiveGoldEarned@</statTracking><br>数额最高的奖励：<statTracking>@DravenPassiveHighestBounty@</statTracking>","Lucian":"每使用一个技能后，卢锡安在@PassiveDuration@秒内的下一次普攻都会连续发射两颗子弹。第二颗子弹对目标造成<physicalDamage>@TotalDamage@物理伤害</physicalDamage>，对小兵时提升至<physicalDamage>@MinionDamage@物理伤害</physicalDamage>。<br><br><attention>警惕：</attention>当卢锡安从另一位友军处获得直接治疗或护盾、或者有一名附近的敌方英雄被<status>定身</status>时，他的双枪会<keywordMajor>能量过载</keywordMajor>，使他的下@NumAuto@次普通攻击造成额外的<magicDamage>@PassiveTotalDamage@魔法伤害</magicDamage>。","Tristana":"崔丝塔娜的攻击距离和<spellName>爆炸火花</spellName>及<spellName>毁灭射击</spellName>的施放距离提升@BonusPassiveRange@。","Ahri":"击杀小兵或野怪会为阿狸提供一层【魂魄碎片】。在拥有@MaxStacks@个碎片后，阿狸会消耗掉它们来<healing>回复@MinionHeal@生命值</healing>。<br><br>当阿狸参与击杀一名她在@TakedownWindow@秒内造成过伤害的敌方英雄后，她会享用其魂魄，来<healing>回复@ChampionHeal@生命值</healing>。","Lux":"拉克丝的伤害型技能会标记目标@DebuffDuration@秒。拉克丝的攻击会消耗该标记，以造成<magicDamage>@TotalDamage@魔法伤害</magicDamage>。<br><br><spellName>终极闪光</spellName>在命中敌人时将先消耗标记然后刷新标记。","Swain":"斯维因可从<spellName>帝国视界</spellName>、<spellName>永不复行</spellName>和敌方英雄的阵亡之中收集<font color='#FF3F3F' size='18'>魂屑</font>。<font color='#FF3F3F' size='18'>魂屑</font>回复<healing>@PassiveHealPercent@最大生命值</healing>并且为斯维因永久提供<healing>@HealthIncrement@最大生命值</healing>。<br><br>已收集的魂屑数量：@f1@<br>已获得的生命值总和：<scaleHealth>@MaxHealthGained@</scaleHealth>","Viktor":"维克托会在击杀一名敌人后获得<keywordMajor>海克斯碎片</keywordMajor>。每获得@EvolutionStackBreakpoint@个<keywordMajor>海克斯碎片</keywordMajor>，维克托将永久升级一个主动技能。在维克托升级他的所有基础技能后，就能升级他的终极技能了。<br><br>击杀小兵提供@MinionStacks@个<keywordMajor>海克斯碎片</keywordMajor>。<br>击杀炮兵提供@CannonStacks@个<keywordMajor>海克斯碎片</keywordMajor>。<br>参与击杀英雄提供@ChampionStacks@个<keywordMajor>海克斯碎片</keywordMajor>。","Syndra":"辛德拉可收集至多@MaxStackAmount@块<evolve>怒法碎晶</evolve>。这些碎晶会增强辛德拉的技能，并且每当辛德拉从一名敌人那里获取一块碎晶时，就会回复<scaleMana>@ManaPerProc@法力值</scaleMana>。<br><br>辛德拉可通过以下途径收集<evolve>怒法碎晶</evolve>：<li>- 在@MarkDuration@秒内用2个技能对敌方英雄造成伤害时获得<evolve>@StacksPerProc@块碎晶</evolve>(@PassiveMarkCooldown@秒冷却时间)<li>- 每花费一个技能点获得<evolve>@PassiveStacksPerLevel@块碎晶</evolve><li>- 每击杀一个大型小兵获得<evolve>@StackPerSiege@块碎晶</evolve><br><br>在@MaxStackAmount@块<evolve>怒法碎晶</evolve>时，辛德拉使她的<scaleAP>法术强度提升@CapstoneAPPerc*100@%</scaleAP>。<br>","Veigar":"维迦的技能会在命中敌方英雄时为他提供@dAbilityStacks@层<keywordMajor>超凡邪力</keywordMajor>。参与击杀英雄后会提供额外的@dTakedownStacks@层。<br><br>每层<keywordMajor>超凡邪力</keywordMajor>会为维迦提供<scaleAP>@APPerStack@法术强度</scaleAP>。","Brand":"布兰德的技能会给目标施加<keywordMajor>烈焰焚身</keywordMajor>，在4秒里持续造成共<magicDamage>@PercentHealthDamage@%最大生命值的魔法伤害</magicDamage>。如果布兰德击杀了一个<keywordMajor>烈焰焚身</keywordMajor>的敌人，他会回复<scaleMana>@ManaRestore@法力</scaleMana>。<keywordMajor>炽热之焰</keywordMajor>可以至多叠加3次。<br><br>当一个英雄或大型野怪达到3层时，<keywordMajor>炽热之焰</keywordMajor>就会在2秒后爆炸，对周围的敌人们造成<magicDamage>@ExplosionDamage@最大生命值的魔法伤害</magicDamage>。","Velkoz":"维克兹的技能会施加一层持续@Duration@秒的<keywordMajor>解构</keywordMajor>。带有3层效果的敌人会消耗所有层数，受到<trueDamage>@TotalDamage@真实伤害</trueDamage>。<br><br>维克兹的攻击会刷新<keywordMajor>解构</keywordMajor>的持续时间，但不会添加新的层数。","Xerath":"每过16秒，泽拉斯的下次对英雄发起的攻击就会回复<scaleMana>@ChampionManaRestoreTT@法力</scaleMana>。如果攻击小兵、野怪或建筑物，那么会回复<scaleMana>@MinionManaRestoreTT@法力</scaleMana>。<br><br>每当泽拉斯击杀了一个单位时，这个冷却时间就会缩短@CooldownKillRefund@秒。","Ziggs":"每过@Cooldown@秒，吉格斯的下次普通攻击就会造成额外的<magicDamage>@TotalDamage@魔法伤害</magicDamage>。这个技能会对建筑造成<magicDamage>@StructureDamage@伤害</magicDamage>。<br><br>吉格斯每施放一次技能，这个效果的冷却时间就会缩短@SpellCDR@秒。","Annie":"在使用4次技能后，安妮的下一个伤害技能会造成@StunDuration@秒<status>晕眩</status>。<br><br>安妮在游戏开始时和重生时，会带着满层的<spellName>嗜火</spellName>。","Orianna":"奥莉安娜的技能都源自她的<keywordMajor>魔偶</keywordMajor>。如果<keywordMajor>魔偶</keywordMajor>与奥莉安娜相距太远，就会自动回到她身边。<br><br>奥莉安娜的攻击会造成额外的<magicDamage>@TotalDamage@魔法伤害</magicDamage>。@StackDuration@秒内对相同目标的后续攻击会造成额外的<magicDamage>@StackDamage@魔法伤害</magicDamage>(最大<magicDamage>@StackDamageMax@伤害</magicDamage>)。","Malzahar":"玛尔扎哈获得@DRPercent@%伤害减免并免疫<status>限制</status>和<status>定身</status>效果，并且在受到或格挡了一次那些效果后，会存留@LingerDuration@秒。这个效果有@ShieldCooldown@秒的冷却时间。","TwistedFate":"<spellPassive>被动：</spellPassive>崔斯特获得<attackSpeed>@AttackSpeedBonus@%攻击速度</attackSpeed>并且每第4次攻击造成额外的<magicDamage>@BonusDamage@魔法伤害</magicDamage>。","Ryze":"瑞兹获得<scaleMana>@PassiveManaCalcTooltip@%最大法力值</scaleMana>。他的技能会基于他的<scaleMana>额外法力值</scaleMana>造成额外伤害。","Hwei":"彗的伤害型技能会对敌方英雄施加持续@Duration@秒的标记。<br><br>用第二个伤害型技能命中被标记的敌人，即可在其脚下生成一次爆炸，对范围内的所有敌人造成<magicDamage>@TotalDamage@魔法伤害</magicDamage>。","Aurora":"用技能或攻击对一个敌人造成3次伤害时会对其驱灵，造成<magicDamage> @ProcDamage@最大生命值的魔法伤害</magicDamage>；如果该敌人是英雄，还会被抽出一个灵物跟随阿萝拉@SpiritModeDuration@秒，每秒回复她<healing>@HealCalc@</healing>生命值。","AurelionSol":"奥瑞利安·索尔的伤害型技能会将敌人们化为<font color='#3458eb'>星尘</font>，星尘可用来永久增强他的每个技能。<li><spellName>星河冲荡</spellName>：爆发造成额外的<magicDamage>@QPassiveScaling@最大生命值的魔法伤害</magicDamage></li><li><spellName>星穹流丽</spellName>：@f2.1@%距离提升。</li><li><spellName>星芒凝汇</spellName>：@f3.1@%区域提升和<scaleHealth>@EPassiveScalingExecute@</scaleHealth>额外处决阈值。</li><li><spellName>星落和天瀑</spellName>：@f4.1@%区域提升。</li><br><rules>奥瑞利安·索尔已获取的<font color='#3458eb'>星尘</font>数量：<font color='#3458eb'>@f1@</font></rules>","Neeko":"天生幻魅@PassiveCooldown@秒%i:cooldown% 妮蔻可以将自身假扮成地图上的其它单位。她在任何时候都可以假扮成一名友方英雄；在她紧挨着任何友方或中立单位时，她会储存其烁玛并使她能够假扮成该单位。你的假扮状态将在以下情况被打破：受到<status>定身类控制效果</status>、施放一个伤害型的技能、假扮非英雄单位时对敌方防御塔造成伤害、或者受到了与假扮对象生命条相等的伤害。 <br><br><rules>妮蔻会获得她假扮单位的很多属性，包括有益和有害的。</rules>","Lissandra":"当一名敌方英雄在丽桑卓附近阵亡时，该英雄会变成一个冰霜丧尸来寻找活着的敌人们。这些丧尸附近的敌人们会被<status>减速</status>@MoveSpeedMod*-100@%。在@ExplosionDelay@秒后，冰霜丧尸会爆炸，造成<magicDamage>@TotalDamage@魔法伤害</magicDamage>。","Cassiopeia":"卡西奥佩娅的所有<speed>移动速度</speed>加成的效率提升@PercentHasteMod@。","Anivia":"<toggle>激活：</toggle>艾尼维亚在目标区域召唤出一阵夹杂着冰与雹的强雨，来使敌人<status>减速</status>@SlowAmount@%并每秒造成<magicDamage>@TotalDamagePerSecond@魔法伤害</magicDamage>。风暴会在@GrowthTime@秒里持续提升规模。<br><br>当风暴完全形成后，它会施加<keywordMajor>冰冻</keywordMajor>效果，使敌人<status>减速</status>@SlowPercentEmpoweredTT@%，并且每秒造成<magicDamage>@EmpoweredDamagePerSecondTooltipOnly@魔法伤害</magicDamage>。","Zoe":"在施放一次技能后，佐伊的下次普攻将造成额外的<magicDamage>@PassiveDamage@魔法伤害</magicDamage>。","Leblanc":"镜花水月@Cooldown@秒 %i:cooldown%当乐芙兰跌至40%最大生命值以下时，她会<keywordStealth>隐形</keywordStealth>1秒并创造一个持续8秒的无伤害幻像。乐芙兰可以通过ALT键来移动幻像。","Fizz":"菲兹处于【幽灵】状态并且减少@DamageReductionCalc@所受伤害(来自所有来源)。","Katarina":"每当一名在过去@ResetWindow@秒被卡特琳娜所伤害的敌方英雄阵亡时，卡特琳娜的技能的冷却时间就会减少@ResetCDR@秒。<br><br>如果卡特琳娜拾起一把<keywordMajor>匕首</keywordMajor>，她会用它来斩击附近的所有敌人来造成<magicDamage>@TotalDamage@魔法伤害</magicDamage>。","Akali":"当阿卡丽用一个技能命中一名敌方英雄时，她会在其周围显出一个持续4秒的圆环，并在朝着圆环时获得<speed>@PassiveSpeedBonus@移动速度</speed>。穿过圆环会使阿卡丽的下次攻击拥有双倍距离并造成额外的<magicDamage>@Damage@魔法伤害</magicDamage>。","Vladimir":"<charge>开始蓄力：</charge>弗拉基米尔积攒一个蓄血库，至多消耗<font color='#CC3300'>@ChargeHealthTooltip@生命值</font>。在攒满后，弗拉基米尔会被<status>减速</status>20%。<br><br><release>释放：</release>弗拉基米尔对附近的敌人释放一股血弹激流，基于蓄力时间造成<magicDamage>@MinDamageTooltip@</magicDamage>至<magicDamage>@MaxDamageTooltip@魔法伤害</magicDamage>。如果这个技能蓄力了至少1秒，那么它还会对目标造成持续0.5秒的@SlowPercent@%<status>减速</status>。","Diana":"黛安娜获得<attackSpeed>@BonusAS@攻击速度</attackSpeed>，在施放一个技能后提升至<attackSpeed>@EmpoweredAS@</attackSpeed>，持续@BuffDuration@秒。<br><br>每第三次攻击会顺劈附近的敌人，造成额外的<magicDamage>@CleaveDamage@魔法伤害</magicDamage>。","Sylas":"在施放一个技能后，塞拉斯会获得一层充能(至多@PassiveCharges@层充能)。塞拉斯的攻击会花费一层充能来挥舞他的锁链，对主要目标造成<magicDamage>@PassiveDamage@魔法伤害</magicDamage>， 并对身边的其它敌人造成<magicDamage>@PassiveAoEDamage@魔法伤害</magicDamage>。<br><br>在拥有至少1层充能时，塞拉斯获得<attackSpeed>@PassiveAttackSpeed*100@%攻击速度</attackSpeed>。","Galio":"加里奥的攻击获得攻速提升，并对周围敌人造成<magicDamage>@TotalDamage@魔法伤害</magicDamage>。<br><br>每当加里奥的技能命中一名敌方英雄或史诗级野怪时，这个效果的冷却时间会缩短@ChargeRatePerHit@秒，每次施放技能仅能缩短一次。","Yasuo":"<spellPassive>百折不屈：</spellPassive>亚索在移动的同时会积攒<keywordMajor>剑意</keywordMajor>——移动得越快，<keywordMajor>剑意</keywordMajor>的获取就越多。当<keywordMajor>剑意</keywordMajor>槽被充满时，在受到来自英雄或野怪的伤害的同时，亚索暂时获得<shield>@ShieldValue@护盾值</shield>。<br><br><spellPassive>向死而生：</spellPassive>亚索的暴击几率提升@CritChanceMultiplier*100@%但他的暴击伤害降低至@CurrentCritDamage@。100%以上的暴击几率，会每1%转化为<physicalDamage>@YasuoCritToAD*.01@额外攻击力</physicalDamage>。","Yone":"<spellPassive>凡灵双剑：</spellPassive>永恩手持双剑，所以他的每第二次攻击可造成<magicDamage>@MagicDamageSplit*100@%魔法伤害</magicDamage>。<br><br><spellPassive>向死而生：</spellPassive>永恩的暴击几率提升@CritChanceMultiplier*100@%，但暴击伤害降低至@CurrentCritDamage@。100%以上的暴击几率，会每1%转化为<physicalDamage>@YoneCritToAD*.01@额外攻击力</physicalDamage>。","MasterYi":"易大师每第@AttackCount@次攻击将进行双重打击。第二段攻击将造成<physicalDamage>@TotalDamage@物理伤害</physicalDamage>。","Jax":"贾克斯的攻击会提供一层持续2.5秒的效果，来提供给他<attackSpeed>@AttackSpeedPerStack@攻击速度</attackSpeed> (最大值为<attackSpeed>@MaxBonusAttackSpeed@攻击速度</attackSpeed>)。","Fiora":"菲奥娜识别出敌方英雄身上的<keywordMajor>破绽</keywordMajor>。用一次攻击或技能命中这个<keywordMajor>破绽</keywordMajor>会造成额外的<trueDamage>@PassiveDamageTotal@最大生命值的真实伤害</trueDamage>，并为菲奥娜提供在@MovementSpeedDuration@秒里持续衰减的<speed>@spell.FioraR:PercentMS*100@%移动速度</speed>，并回复<healing>@PassiveHealAmount@生命值</healing>。<br><br>菲奥娜会在15秒后或是击中一个<keywordMajor>破绽</keywordMajor>后找出一个新破绽。","Sett":"瑟提的攻击会交替使用左重拳和右重拳。右重拳会跟着左重拳快速打出，并造成额外的<physicalDamage>@RightPunchBonus@物理伤害</physicalDamage>。<br><br>瑟提的每@MissingHealthUnit*500@%已损失生命值会为他提供额外的<healing>@TooltipRegenPerMissingHealthCalc@生命回复</healing>。","Garen":"盖伦每5秒回复<healing>@RegenCalc@最大生命值</healing>，前提是他在之前的@DamageTimer@秒内未受到伤害或被敌方技能命中。","Darius":"德莱厄斯的下次攻击造成<physicalDamage>@EmpoweredAttackDamage@物理伤害</physicalDamage>和持续@SlowDuration@秒的@SlowPercent@%<status>减速</status>。<br><br>如果这个技能击杀了目标，那么会返还其法力消耗并缩短其@PercentCDRefund@%的冷却时间。<br><br><rules>这个技能会在造成伤害时触发技能特效。</rules>","Aatrox":"亚托克斯的攻击造成额外的<magicDamage>@PDamage@最大生命值魔法伤害</magicDamage>并回复<healing>@PHealingRatio*100@%实际伤害值的生命值</healing>，对小兵时降低至@PHealingMinionMod*100@%。这个效果有@PCooldown@秒冷却时间。<br><br>对英雄和大型野怪进行的攻击和技能会使这个效果的冷却时间缩短2秒。用<spellName>暗裔利刃</spellName>的边缘命中时会使这个效果的冷却时间缩短4秒。","Illaoi":"俄洛伊彰显她神祗的风采，如果附近没有任何触手存在的话，就会在附近地形上生成一条触手(<scaleLevel>@SpawnCD@</scaleLevel>秒冷却时间)。触手不会自行攻击，但可通过俄洛伊的技能来让它们<keywordMajor>猛击</keywordMajor>。<br><br><keywordMajor>猛击</keywordMajor>造成<physicalDamage>@spell.IllaoiQ:TentacleDamageTotal@物理伤害</physicalDamage>。如果猛击对1名以上的敌方英雄造成伤害，那么俄洛伊就会治疗自身<healing>@MissingHPPercentHeal*100@%的已损失生命值</healing>。","Mordekaiser":"莫德凯撒的攻击会造成额外的<magicDamage>@BonusAPAuto@魔法伤害</magicDamage>。<br><br>在用3次普通技能或攻击命中英雄或野怪后，莫德凯撒会将自身笼罩在负能量的遮蔽中。这个遮蔽每秒造成<magicDamage>@AuraDamagePerStack@加上@PercentHealthForAura@%最大生命值的魔法伤害</magicDamage>并为他提供<speed>@PassiveMovementSpeed@移动速度</speed>。","DrMundo":"蒙多医生抵抗他受到的第一个<status>定身</status>效果，但会失去<healing>@CurrentHealthLoss*100@%当前生命值</healing>并在附近掉落一罐持续@CannisterGroundDuration@秒的化学药剂。移动到化学药剂上可使这个技能的冷却时间缩短@PassiveCooldownRefund@秒并回复<healing>@MaxHealthGain*100@%最大生命值</healing>。敌方英雄在移动到化学药剂上后会将其摧毁。<br><br>蒙多医生每5秒回复<healing>@MaxHealthRegen@最大生命值</healing>。","Sion":"在被击杀后，赛恩会回光返照一段时间，可以移动并攻击，但在回光返照时，他的生命值会急速衰减。他还会获得@Lifesteal*100@%生命偷取，攻击得超快，并且每次攻击会额外造成相当于目标<physicalDamage>@PercentMaxHP*100@%最大生命值的物理伤害</physicalDamage>。<br><br>他的所有技能都会被替换为【死亡冲动】，能为他提供爆发性的移动速度加成。","Ornn":"奥恩可在地图的任意位置上花费金钱来锻造非消耗品的装备。<br><br>当奥恩到达@MasterworkLevel@级时，他将能把自己的一件传说装备升级成一件杰作装备。@MasterworkLevel@级后，每升1级，奥恩就可为一名友方升级一件传说装备，方法是彼此处在附近时点击该友方英雄。<br><br>奥恩使所有来源的<healing>生命值</healing>、<scaleArmor>护甲</scaleArmor>和<scaleMR>魔抗</scaleMR>加成额外提升@BaseStatAmp*100@%。奥恩每给一件传说装备进行升级，就会使这些加成属性提升@AdditionalMythicStatAmp*100@%。","Malphite":"在未受到伤害@PassiveCooldown@秒后，墨菲特为自身提供<shield>@TotalShield@护盾值</shield>。","Maokai":"茂凯的下一次攻击会回复自身<healing>@PassiveHealingTotal@生命值</healing>。<br><br>每施放一次技能或被一名敌方英雄的技能命中时，都会使这个冷却时间缩短@PassiveCooldownReduction@秒。被大型野怪或史诗级野怪的攻击或技能命中时，都会使这个冷却时间缩短@JungPassCooldownReduction@秒。","Chogath":"击杀一名敌人会回复<scaleLevel>@ChogathCarnivoreHeal@</scaleLevel>生命值和<scaleLevel>@ChogathCarnivoreMana@</scaleLevel>法力值。","TahmKench":"普攻造成<magicDamage>@TotalDamage@额外魔法伤害</magicDamage>。 对英雄时，普攻会添加一层持续@Duration@秒的<spellName>培养品味</spellName>，至多至@MaxStacks@层。<br><br>在@MaxStacks@层时，对这个英雄施放的<spellName>巨舌鞭笞</spellName>和<font color='#0bf7de'>大快朵颐</font>会获得强化效果。","Poppy":"每过@ActualCooldown@秒，波比的下次攻击就会将她的圆盾投掷出去，获得@BonusRange@距离并造成<magicDamage>@TotalDamage@魔法伤害</magicDamage>。圆盾会从目标处弹开，在附近着陆。波比能够将它拾起来获得<shield>@ShieldValue@护盾值</shield>，并且敌人们可以踩在它上面来将它摧毁。<br><br>如果圆盾击杀了目标，那么它会自动返回至波比处。","Camille":"卡蜜尔对敌方英雄发起的攻击会基于该英雄的伤害类型(<physicalDamage>物理</physicalDamage>或<magicDamage>魔法</magicDamage>)提供专门吸收该类型伤害的<shield>@ShieldAmount@护盾</shield>，持续@ShieldDuration@秒。这个效果有@PassiveCooldown@秒的冷却时间。","Irelia":"艾瑞莉娅在用一个技能命中一名敌人时，会获得一层持续@BuffDuration@秒的效果(最大@MaxStacks@层)。每层效果为她提供<attackSpeed>@SingleStackAS@%攻击速度</attackSpeed>，并在满层时她的攻击会造成额外的<magicDamage>@OnHitBonus@魔法伤害</magicDamage>。<br><br>攻击一个英雄、建筑或大型野怪，会刷新效果的持续时间。艾瑞莉娅每命中一个英雄都会获得一层效果，或在至少命中一个非英雄的敌人时获得一层效果。","Renekton":"雷克顿的下次攻击会进行两次打击，造成@StunDuration@秒<status>晕眩</status>和共计<physicalDamage>@BasicTotalDamage@物理伤害</physicalDamage>。命中一名英雄会生成额外的<keywordMajor>@BonusFuryVsChamps@怒气</keywordMajor>。<br><br><keywordMajor>怒气加成</keywordMajor>：雷克顿转而进行三次打击，摧毁<shield>护盾</shield>然后造成<physicalDamage>@EmpTotalDamage@物理伤害</physicalDamage>和@EnragedStunDuration@秒<status>晕眩</status>。不会生成任何<keywordMajor>怒气</keywordMajor>。","Gwen":"格温的攻击附带额外的<magicDamage>@PercentHealth1000Cuts@最大生命值的魔法伤害</magicDamage>。格温自身获得治疗效果，数额相当于这个技能对英雄造成的<healing>@HealingPercent@伤害值</healing>，至多至<healing>@healcap@</healing>。<br>","Tryndamere":"泰达米尔的攻击会为他提供<keywordMajor>5怒气</keywordMajor>或在暴击时提供<keywordMajor>10怒气</keywordMajor>，并在击杀一个单位后提供<keywordMajor>10怒气</keywordMajor>。在脱离战斗状态8秒后，泰达米尔会每秒损失<keywordMajor>5怒气</keywordMajor>。<br><br>每点<keywordMajor>怒气</keywordMajor>提供@PassiveCritConversionTooltip@%暴击几率。","Nasus":"内瑟斯拥有额外的@Spell.NasusPassive:LifestealTooltip@%生命偷取。","Urgot":"厄加特的6条腿上各有一门加农炮。攻击和<spellName>净除</spellName>时将会发射面对着他目标的那门腿炮，造成<physicalDamage>@ADDamage@外加@PercentHPRatio@最大生命值的物理伤害</physicalDamage>。每条腿的这个效果各有@PerLegCD@秒冷却时间。","Hecarim":"赫卡里姆获得<scaleAD>@BonusAD@攻击力</scaleAD>，基于等级提升。","LeeSin":"李青的技能会为他的下两次攻击提供<attackSpeed>@PassiveAS@%攻击速度</attackSpeed>。第一次攻击回复<keywordMajor>@TTFirstHitEnergy@能量</keywordMajor>，第二次攻击回复<keywordMajor>@EnergyReturn@能量</keywordMajor>。","Viego":"如果敌方英雄在被佛耶戈命中后的@TakedownWindow@秒内阵亡的话，就会变成幽魂。佛耶戈可以攻击幽魂来<keywordMajor>占据</keywordMajor>该英雄，回复<healing>该英雄@PercentHealthHeal@%的最大生命值</healing>并获得该英雄非终极技能、攻击和装备的使用权，持续@TransformDuration@秒。在此期间，他会将该英雄的终极技能替换为他自己终极技能的一次免费施放，并在朝着敌方英雄时获得<speed>@MoveSpeedPercent*100@%移动速度</speed>。","Ekko":"对相同目标的每第三次攻击或伤害型技能都会造成额外<magicDamage>@ThreeHitDamage@魔法伤害</magicDamage>。如果目标是一个英雄，那么艾克还会获得持续@SpeedDuration@秒的<speed>@BonusMS@移动速度</speed>。这个特效每@LockoutTime@秒只能对相同目标生效一次。","Kayn":"{{ game_spell_Kayn_P_main_@f1@ }}<br><rules><br>在完全充能任一形态的@PassiveSecondFormDelayTooltip@分钟后，凯隐可以变形为任一形态，即使该形态并未完全充能。每当为非完全充能的形态获取充能时，这个计时器都会缩短5秒。<br>凯隐会在变身完成后获得【家园卫士】。<br></rules>","Nocturne":"每过@Cooldown@秒，魔腾的下次攻击就会袭击所有附近的敌人们，造成<physicalDamage>@TotalDamageNoCrit@物理伤害</physicalDamage>并且每命中一个目标就会回复<healing>@TotalHealing@生命值</healing>。<br><br>魔腾的攻击会使这个技能的冷却时间缩短@AACDR@秒，在对抗英雄和野怪时缩短数额会提升至@AAChampMonsterCDR@。","XinZhao":"每第三次攻击或用<spellName>风斩电刺</spellName>命中敌人时，都会造成额外的<physicalDamage>@TotalDamage@物理伤害</physicalDamage>并回复<healing>@TotalHealing@生命值</healing>。","Amumu":"阿木木的攻击会<keywordMajor>诅咒</keywordMajor>他的敌人@DebuffDuration@秒，使其从所有来源的魔法伤害中多承受额外的<trueDamage>@DamageAmp*100@%真实伤害</trueDamage>。","Sejuani":"在不承受来自英雄或大型野怪的伤害@FrostArmorOOC@秒后，瑟庄妮会免疫<status>减速</status>效果并获得<scaleArmor>@TotalArmorTooltip@护甲</scaleArmor>和<scaleMR>@TotalMRTooltip@魔法抗性</scaleMR>。<br><br>瑟庄妮对被她<status>晕眩</status>的敌人进行的第一次攻击会造成额外的<magicDamage>@PercentHPDamage@最大生命值的魔法伤害</magicDamage>。","Lillia":"莉莉娅的技能会施加<keywordMajor>梦尘</keywordMajor>，在@Duration@秒里持续造成共<magicDamage>@DotPercentTooltip@最大生命值的魔法伤害</magicDamage>。在此期间，莉莉娅在对抗大型野怪时会持续回复共<healing>@MonsterHealTT@生命值</healing>，在对抗英雄时持续回复共<healing>@ChampionHealTT@生命值</healing>。","Shyvana":"参与击杀敌方英雄、大型小兵和大型野怪后，希瓦娜会获得<spellName>龙鳞铁衣 %i:Shyvana%</spellName>层数， 每层为希瓦娜提供永久的<scaleArmor>@BonusArmor@护甲</scaleArmor>和<scaleMR>@BonusMagicResist@魔法抗性</scaleMR>。<br><br><scaleArmor>额外护甲：@Calc_Bonus_Armor@</scaleArmor><br><scaleMR>额外魔法抗性：@Calc_Bonus_MR@</scaleMR>","Belveth":"在使用一个技能后，卑尔维斯会变为幽灵状态并且获得持续@SheenDuration@秒的<attackSpeed>@SheenSpeedPerStack@攻击速度</attackSpeed>。<br><br>卑尔维斯在参与击杀大型小兵和野怪后获得<keywordMajor>@MonsterStacks@层溶烛化紫</keywordMajor>，在参与击杀英雄和史诗级野怪后获得<keywordMajor>@ChampionStacks@层溶烛化紫</keywordMajor>。每层都会永久提供<attackSpeed>@AttackSpeedPerStack@%攻击速度</attackSpeed>。<br><br>总额外<attackSpeed>攻击速度</attackSpeed>：<attackSpeed>@TotalAttackSpeedFromStacks@%</attackSpeed>","Warwick":"沃里克的攻击在命中时附带额外的<magicDamage>@OnHitDamage@魔法伤害</magicDamage>。<br><br>如果沃里克的生命值低于@HealingThreshold*100@%，那么还会回复<healing><keywordMajor>血之饥渴</keywordMajor>@HealingRatio*100@%实际伤害值的生命值</healing>。如果沃里克的生命值低于@EmpoweredHealingThreshold*100@%，那么治疗效果提升至<healing>@EmpoweredHealingRatio*100@%实际伤害值</healing>。","Volibear":"沃利贝尔在每次用攻击或技能造成伤害时都会获得<attackSpeed>@AttackSpeedCalc@攻击速度</attackSpeed>，持续@BuffDuration@秒，至多可叠加5层。<br><br>叠满5层时，沃利贝尔的双爪会激荡闪电，使他的攻击对目标和相距最近的4名敌人造成额外的<magicDamage>@ChainLightningDamage@魔法伤害</magicDamage>。","MonkeyKing":"孙悟空获得<scaleArmor>@BonusArmor@护甲</scaleArmor>并且<healing>每5秒回复他@HealthPercentPer5*100@%的最大生命值</healing>。每当他或他的<keywordMajor>分身</keywordMajor>用一次攻击或技能击中一名敌方英雄或野怪后，这些加成就会提升@StackMultiplier*100@%，持续@StackDuration@秒，最多可叠加@MaxStacks@层。","Trundle":"特朗德尔吸取一名敌方英雄的生命力，在@ActualDurationOfDrainBuff@秒里持续造成共计<magicDamage>@TotalPercentHPDamage@最大生命值的魔法伤害</magicDamage>并偷取<scaleArmor>@ArmorMRShred*100@%护甲</scaleArmor>和<scaleMR>魔法抗性</scaleMR>。","Graves":"格雷福斯的霰弹枪拥有一些独特性能：<br><li>它只有2颗<keywordMajor>子弹</keywordMajor>并且打完后就必须得重新装填。<attackSpeed>攻击速度</attackSpeed>会略微缩短装填时间，但会显著缩短开火间隔。<li>每次攻击会发射4颗弹丸。对同一目标的第一颗弹丸会造成<physicalDamage>@SingleBulletDamage@物理伤害</physicalDamage>，并且每颗后续弹丸造成<physicalDamage>@MultiBulletDamage@物理伤害</physicalDamage>。作为常规暴击效果的替代，暴击会将弹丸的数量提升至6颗并让每颗弹丸造成的伤害提高@CritDamageMult@。对建筑造成的伤害减少@StructureDamageReduction*100@%。<li>弹丸在命中第一个单位后就会停下。会<status>击退</status>被多颗弹丸命中的非英雄单位。","Thresh":"锤石在走过已死敌人身边的时候，会收集他们的<keywordMajor>灵魂</keywordMajor>。每个<keywordMajor>灵魂</keywordMajor>为他提供<scaleArmor>@StatValuePerSoul@护甲</scaleArmor>和<scaleAP>@StatValuePerSoul@法术强度</scaleAP>。","Nautilus":"诺提勒斯对一名目标发起的第一次攻击会造成<physicalDamage>@TotalDamageTooltip@物理伤害</physicalDamage>并将其<status>禁锢</status>@RootDuration@秒。","Leona":"蕾欧娜的各个技能会标记敌人@MarkDuration@秒，其他友方英雄在对被标记的敌人造成伤害时，会消耗该印记以造成额外的<magicDamage>@TotalDamage@魔法伤害</magicDamage>。","Blitzcrank":"布里茨给它的拳头充能，使它的下次攻击可以<status>击飞</status>@CCDuration@秒并造成<physicalDamage>@TotalDamage@物理伤害</physicalDamage>。","Pyke":"派克会将所受来自英雄的@OneEnemyCalc@伤害储存起来，这个比率会在附近有一个以上英雄时提升至@AdditionalBonusCalc@。派克至多可储存@DamageStorageMax@伤害。在<unique>离开敌方视野</unique>后，他会急速回复这个已储存的伤害。<br><br>此外，派克会将所有最大生命值提升转化为攻击力，<healing>14生命值</healing>转化为<physicalDamage>1攻击力</physicalDamage>。","Nami":"每当娜美的技能命中友方英雄时，他们都会获得<speed>@TotalMSBonus@移动速度</speed>，在@BuffDuration@秒里持续衰减。","Lulu":"璐璐会受到仙灵皮克斯的协助。当璐璐攻击时，皮克斯会朝她的目标发射3颗飞弹，对第一个命中的敌人造成<magicDamage>@CombinedDamage@魔法伤害</magicDamage>。","Janna":"迦娜召唤一阵魔法季风，<status>击退</status>附近的敌人们然后在@Duration@秒里持续治疗附近的友军共<healing>@TotalHeal@生命值</healing>。移动或使用技能都会提前结束这阵季风。","Sona":"<passive>渐入佳音</passive>：娑娜可通过出色地使用她的基础技能来获得【渐入佳音】层数。每层会为她永久提供+%i:scaleAH%@AccelerandoAHPerStack@基础技能急速，至多提供%i:scaleAH% @AccelerandoCap@基础技能急速。当她达到%i:scaleAH% @AccelerandoCap@基础技能急速时，将不再进一步获得层数，转而使她当前的<keywordMajor>终极技能</keywordMajor>冷却时间缩短@Spell.SonaPassive:AccelerandoUltCDR@秒。<br><br><passive>能量和弦</passive>：在使用@PowerChordPassiveCountMax@次基础技能后，娑娜的下次攻击将造成额外的<magicDamage>@PowerChordDamage@魔法伤害</magicDamage>并会基于娑娜最新激活的乐曲来施加一个额外效果。<br><li><spellName>英勇赞美诗：</spellName>该次攻击转而造成<magicDamage>@Spell.SonaQ:TotalStaccatoDamage@魔法伤害</magicDamage>。<li><spellName>坚毅咏叹调：</spellName>使目标造成的伤害降低@Spell.SonaW:TotalDiminuendoWeakenPercent@，持续@Spell.SonaW:DiminuendoDuration@秒。<li><spellName>迅捷奏鸣曲：</spellName>对目标施加持续@Spell.SonaE:TempoDuration@秒的@Spell.SonaE:TotalTempoMoveSpeedSlow@<status>减速</status>。","Soraka":"索拉卡创造一个星之领域，对英雄造成<magicDamage>@TotalDamage@魔法伤害</magicDamage>。领域会存留@RootDelay@秒，<status>沉默</status>其中的敌人们。当领域消失后，领域中的英雄们会被<status>禁锢</status>@RootDuration@秒并受到<magicDamage>@TotalDamage@魔法伤害</magicDamage>。","Yuumi":"当悠米的攻击和技能击中英雄时，她会治疗自身<healing><health>@HealAmount@生命值</health></healing>。如果悠米在@HealDelayTime@秒里<keywordMajor>附身</keywordMajor>至一名友方英雄，那么这个英雄也会获得<heal>治疗</heal>。这个效果有@PassiveCooldown@秒冷却时间。<br><br>在<keywordMajor>附身</keywordMajor>状态时，悠米和她附身的英雄每击杀一个英雄或小兵都会使悠米获得与该英雄的<keywordMajor>友谊值</keywordMajor>。拥有最多<keywordMajor>友谊值</keywordMajor>的友军会成为她的<keywordMajor>挚友</keywordMajor>，并会在被悠米<keywordMajor>附身</keywordMajor>时为她的各个技能提供额外效果。<br><br><rules>如果悠米已附身于一个友方英雄，那么这个治疗会自动触发。</rules>","Morgana":"莫甘娜的技能会<healing>治疗</healing>自身，数额相当于这些技能对英雄、大型小兵、中型野怪和大型野怪造成的实际伤害的@HealPercent@%。","Zyra":"婕拉每@SeedCooldown@秒在她周围生成持续30秒的<keywordMajor>种子</keywordMajor>。她同一时间可存在8颗已种植的<keywordMajor>种子</keywordMajor>。如果一名敌方英雄踩到了<keywordMajor>种子</keywordMajor>，那么种子会阵亡。婕拉躲在草丛里时不会生成<keywordMajor>种子</keywordMajor>。<br><br>这些<keywordMajor>种子</keywordMajor>可通过她的其它技能生成植物，植物造成<magicDamage>@PlantDamage@魔法伤害</magicDamage>。","Senna":"赛娜可以攻击由阵亡敌人生成的灵魂，以吸收它们的<keywordMajor>黑雾</keywordMajor>。她还可以从被她用攻击或技能命中2次的敌方英雄身上吸取<keywordMajor>黑雾</keywordMajor>，同时造成额外的<physicalDamage>@BonusCurentHealthDamage@%当前生命值的物理伤害</physicalDamage>。<br><br>每层<keywordMajor>黑雾</keywordMajor>提供<physicalDamage>@ADPerStack@攻击力</physicalDamage>。每@StacksForBonus@层黑雾提供@BonusRange@攻击距离和@BonusCritChance@%暴击几率但她仅拥有@CriticalDamage@暴击伤害。@CritToLifestealConversionPercent*100@%溢出的暴击几率会被转化为生命偷取。<br><br>赛娜的攻击需要更长时间来开火，命中时造成额外<physicalDamage>@BonusOnHitDamage@物理伤害</physicalDamage>，并暂时为她提供<speed>目标@MSSteal@的移动速度</speed>。","Milio":"当米利欧的技能触碰到友方英雄时，会使其下一个攻击或技能造成<physicalDamage>@ADBurstRatio@该友方英雄攻击力</physicalDamage>的额外<magicDamage>魔法伤害</magicDamage>，外加在@BurnDuration@秒里持续造成的<magicDamage>@BurnDamage@魔法伤害</magicDamage>。","Renata":"烈娜塔的攻击会标记敌人@PassiveDuration@秒，并且会对未被标记的敌人造成<magicDamage>@PercentAmpCalcSelf@最大生命值的魔法伤害</magicDamage>。<br><br>友方英雄的攻击或技能会消耗掉这个标记，来造成<magicDamage>@PercentAmpCalc@最大生命值的魔法伤害</magicDamage>。<br><br><rules>烈娜塔同一时间只能保留一个目标身上的标记。</rules>","Braum":"布隆的攻击会施加持续@StackDuration@秒的<keywordMajor>震荡猛击</keywordMajor>。带有<keywordMajor>震荡猛击</keywordMajor>的敌人会被任何友军的攻击施加额外的层数。<br><br>在@StackCap@层时，目标会被<status>晕眩</status>@StunDuration@秒，并受到<magicDamage>@TotalDamage@魔法伤害</magicDamage>。在接下来的@StunCD@秒里，该目标不会被施加层数，但布隆的攻击会对其造成额外的<magicDamage>@OnHitDamage@魔法伤害</magicDamage>。","Alistar":"阿利斯塔在对一个敌方英雄造成<status>晕眩</status>或<status>震移</status>时，或附近有一名敌人阵亡时，会获得一层效果。在@PassiveMaxStacks@层时，他会发出怒吼，治疗自身<healing>@BaseHeal@生命值</healing>并治疗所有附近的友方英雄<healing>@AllyHeal@生命值</healing>。<br><br>敌方英雄和史诗级野怪的阵亡会完全充能这个技能。","Rell":"芮尔的攻击和技能会窃取<scaleArmor>@StealPercent*100@%护甲</scaleArmor>和<scaleMR>@StealPercent*100@%魔法抗性</scaleMR>，持续@ShredDuration@秒。最大值：@MaxPercentTooltipOnly@%。普攻附带<magicDamage>@OnHitDamage@魔法伤害</magicDamage>。","Taric":"在使用一次技能后，塔里克在@Duration@秒内的下2次攻击获得<attackSpeed>100%攻击速度</attackSpeed>，造成额外的<magicDamage>@TotalDamage@魔法伤害</magicDamage>，并使他的基础技能的冷却时间缩短@CDR@秒。","Karma":"卡尔玛在游戏开始时就会自带1级<spellName>梵咒</spellName>。<br><br>她每用一个技能伤害到一名敌方英雄时，<spellName>梵咒</spellName>的冷却时间就会缩短@SpellMantraRefund@秒。","Bard":"巴德会引来<font color='#cccc00'>调和之音</font>出现在地图各处。当巴德移动到一个<font color='#cccc00'>调和之音</font>附近时，会将其收集，并获得持续@SpeedStackDuration@秒的<speed>@TooltipMSPerStack@%非战斗状态移动速度</speed>(至多可叠加@MaxSpeedStacks@次)、@f1@经验值、并回复<scaleMana>@TooltipManaRestore@%最大法力值</scaleMana>。<br><br>巴德每@f5@秒会引来一个<font color='#FF9900'>木灵</font>(数量上限：@f4@个)。巴德的攻击会消耗一个<font color='#FF9900'>木灵</font>来造成额外的<magicDamage>@MeepDamageNoChime@外加@DamagePerCheckpoint@每@TooltipChimeDamageCheckpoint@层<font color='#cccc00'>调和之音</font>的魔法伤害</magicDamage>，以及基于已收集的<font color='#cccc00'>调和之音</font>层数的额外效果。","Zilean":"基兰将时光储存为经验值并能将其提供给他的友军。当他拥有足够的经验值来使一名友方英雄升级时，他就能通过右键点击来传授经验值。基兰自身也会获得等值的经验值。<br><br>总共已奖励：<statTracking>@TotalXP@经验值</statTracking>。<br><br><rules>无法在战斗中传授经验值。</rules>","Seraphine":"萨勒芬妮施放的每第三个技能将会产生回响，以自动施放第二次。<br><br>此外，萨勒芬妮会从她的友军身上汲取灵感，每当她施放技能时，附近的每位友方英雄都会为她生成一个<keywordMajor>音符</keywordMajor>。每个<keywordMajor>音符</keywordMajor>都会使萨勒芬妮提升@BonusAARange@攻击距离并造成额外的<magicDamage>@AutoDamage@魔法伤害</magicDamage>，之后<keywordMajor>音符</keywordMajor>会被消耗掉。","Teemo":"如果提莫在@StealthCooldownDuration@秒内静止站立且没有受到伤害，就会进入<keywordStealth>隐形</keywordStealth>，直到他移动为止。在草丛中时，他可以在移动时保持<keywordStealth>隐形</keywordStealth>。<br><br>在离开<keywordStealth>隐形</keywordStealth>后，提莫会获得持续@AttackSpeedDuration@秒的<attackSpeed>@BonusAttackSpeed@攻击速度</attackSpeed>。","Singed":"辛吉德将借助附近英雄的冲流，来获得持续@MSDuration@秒的<speed>@MSPercent*100@%移动速度</speed>。这个效果在每个英雄身上拥有@PerTargetCD@秒冷却时间。","Heimerdinger":"黑默丁格在他的<keywordMajor>炮台</keywordMajor>和友方防御塔附近时会获得<speed>@MovementSpeed.0*100@%移动速度</speed>。","Kennen":"凯南的技能会施加一层持续@MarkDuration@秒的印记。在3层时，敌人会被<status>晕眩</status>@StunDuration@秒并且凯南会回复<keywordMajor>@EnergyRestore@能量</keywordMajor>。","Pantheon":"在使用@ActionsToEmpower@次技能或攻击后，潘森会强化他的下一个基础技能。","Jayce":"杰斯从1级开始就可以使用<spellName>墨丘利之炮 / 墨丘利之锤</spellName>来切换近战和远程武器。切换武器的同时也会切换他的所有技能，并为他提供持续@MovementSpeedDuration@秒的<speed>@FlatMovementSpeed@移动速度</speed>。","Gnar":"纳尔可通过造成和受到伤害来生成<keywordMajor>怒气</keywordMajor>。在满层<keywordMajor>怒气</keywordMajor>时，他的下一个技能会使他变形为<keywordMajor>巨型纳尔</keywordMajor>，持续15秒。<br><br><keywordMajor>小型纳尔：</keywordMajor>获得<speed>@TotalMS@移动速度</speed>，<attackSpeed>@TotalAS@攻击速度</attackSpeed>，以及@TotalAttackRange@攻击距离。<br><br><keywordMajor>巨型纳尔：</keywordMajor>获得<healing>@TotalMegaGnarHealth@最大生命值</healing>，<scaleArmor>@TotalMegaGnarArmor@护甲</scaleArmor>，<scaleMR>@TotalMegaGnarMR@魔法抗性</scaleMR>，和<physicalDamage>@TotalMegaGnarAD@攻击力</physicalDamage>。","KSante":"奎桑提的伤害型技能会标记命中的敌人。攻击被标记的敌人可以造成<physicalDamage>@FlatDamage@外加@PercentHealthDamage@最大生命值的物理伤害</physicalDamage>并消耗掉该标记。<br><br><keywordMajor>全盛姿态</keywordMajor>：奎桑提的攻击、技能和被动造成额外的@MaxHealthDamagePercent@最大生命值的物理伤害。","Ambessa":"在安蓓萨施放技能的起手阶段，下达移动或攻击指令，会让她在技能施放完成后朝该方向冲刺一段距离。<br><br>每次施放都会为她带来一层持续@Attack_Buff_Duration@秒的充能（最多@Attack_Buff_Max_Stacks@层）。安蓓萨拥有充能时，获得<attention>@Attack_Range_Amount@%i:scaleRange%攻击距离</attention>和<attackSpeed>@Calc_Attack_Speed@%i:scaleAS%攻击速度</attackSpeed>。攻击会消耗一层充能，造成<physicalDamage>@Calc_OnHit_Damage_Flat@物理伤害</physicalDamage>并回复<keywordMajor>@Calc_OnHit_Energy_Refund@能量</keywordMajor>。","Smolder":"用技能命中英雄和用<spellName>超级灼热龙息</spellName>击杀敌人时会提供一层<spellName>龙之研习</spellName>，这些层数可强化斯莫德的各个基础技能。<br><li><spellName>超级灼热龙息</spellName>：造成额外的<magicDamage>@Passive_QDamageIncrease@魔法伤害</magicDamage>并在@spell.SmolderQ:StackTier1@层、@spell.SmolderQ:StackTier2@层和@spell.SmolderQ:StackTier3@层时获得新效果。<li><spellName>阿嚏！</spellName>：爆炸造成额外<magicDamage>@Passive_WDamageIncrease@魔法伤害</magicDamage>。<li><spellName>扑棱，扑棱，扑棱！</spellName>：每次命中造成额外<magicDamage>@EBonusDamage@魔法伤害</magicDamage>并且每@EStacksPerAttackTooltip@层获得一个额外弹体。<br><br><rules>斯莫德已获得<font color='#c93c3c'>龙之研习</font>：<font color='#c93c3c'>@f1.0@</font>。</rules>"};
+
+const STAT_CN = {0:"法术强度",1:"护甲",2:"攻击力",3:"攻击速度",5:"魔法抗性",6:"移动速度",7:"暴击几率",8:"暴击伤害",9:"冷却缩减",10:"技能急速",11:"生命值",12:"当前生命值",13:"已损失生命值",15:"生命偷取"};
+const DROP_TOKENS = {spellmodifierdescriptionappend:1};
+
+function formatNum(n){
+  if (n == null || n !== n || n === Infinity || n === -Infinity) return null;
+  n = Number(n);
+  if (Math.abs(n) < 1e-12) return "0";
+  const r = Math.round(n);
+  const thresh = Math.abs(n) >= 10 ? 0.02 : 5e-4;
+  if (Math.abs(n - r) < thresh) return String(r);
+  const rounded = Math.round(n * 1000) / 1000;
+  if (Math.abs(rounded - Math.round(rounded)) < 1e-9) return String(Math.round(rounded));
+  return String(rounded).replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
+}
+function formatRankList(values){
+  if (!values || !values.length) return null;
+  const nums = [];
+  for (const v of values){
+    const s = formatNum(v);
+    if (s == null) return null;
+    nums.push(s);
+  }
+  if (nums.every(x => x === nums[0])) return nums[0];
+  return nums.join("/");
+}
+function pickRanks(values, maxrank){
+  if (!values || !values.length) return [];
+  const vals = values.map(Number);
+  const n = vals.length, mr = maxrank || 5;
+  if (n === mr) return vals.slice();
+  if (n === 7) return vals.slice(1, 1+mr);
+  if (n === mr + 1) return vals.slice(1, 1+mr);
+  if (n === 6) return vals.slice(0, mr);
+  if (n === 18) return vals.slice();
+  if (n === 19 || n === 31){
+    if (vals[0] === 0 || Math.abs(vals[0]-vals[1]) < 1e-12) return vals.slice(1, n === 19 ? 19 : 31);
+    return n === 19 ? vals.slice(0,18) : vals.slice();
+  }
+  if (n > mr){
+    if (n === mr + 2) return vals.slice(1, 1+mr);
+    return vals.slice(0, mr);
+  }
+  return vals.slice();
+}
+function fnv1a32(str){
+  let h = 0x811c9dc5;
+  const s = String(str).toLowerCase();
+  for (let i=0;i<s.length;i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h;
+}
+function hashBrace(name){ return "{" + fnv1a32(name).toString(16).padStart(8,"0") + "}"; }
+
+function fmtStatBonus(coeff, stat, formula){
+  if (coeff == null) return null;
+  const c = Number(coeff);
+  if (!isFinite(c) || Math.abs(c) < 1e-12) return null;
+  const statName = STAT_CN[stat != null ? stat : 0];
+  if (!statName) return null;
+  const prefix = formula === 2 ? "额外" : (formula === 1 ? "基础" : "");
+  const label = prefix + statName;
+  if (Math.abs(c) <= 5){
+    const pct = formatNum(c*100);
+    return pct == null ? null : "+"+pct+"%"+label;
+  }
+  const flat = formatNum(c);
+  return flat == null ? null : "+"+flat+label;
+}
+
+function indexBin(binData){
+  const spells = [];
+  const byEnd = Object.create(null);
+  for (const path of Object.keys(binData)){
+    const obj = binData[path];
+    if (!obj || !obj.mSpell) continue;
+    const name = path.split("/").pop();
+    const td = (obj.mSpell.mClientData && obj.mSpell.mClientData.mTooltipData) || {};
+    const rec = {path, name, spell: obj.mSpell, keys: td.mLocKeys || {}};
+    spells.push(rec);
+    const k = name.toLowerCase();
+    (byEnd[k] || (byEnd[k] = [])).push(rec);
+  }
+  return {spells, byEnd};
+}
+
+function scoreSpell(rec, spellId, isPassive, champ){
+  const path = rec.path, name = rec.name, keys = rec.keys;
+  const lowPath = path.toLowerCase(), lowName = name.toLowerCase();
+  const sid = (spellId||"").toLowerCase();
+  const champL = (champ||"").toLowerCase();
+  let score = 0;
+  if (sid && lowName === sid) score += 80;
+  if (sid && lowPath.endsWith("/"+sid)) score += 50;
+  const blob = Object.values(keys).join(" ").toLowerCase();
+  if (isPassive){
+    if (champL){
+      if ([champL+"p", champL+"passive", champL+"passivemarker", champL+"passivesouls"].includes(lowName)) score += 90;
+      if (new RegExp(champL+"pability/"+champL+"p$").test(lowPath)) score += 90;
+    }
+    if (keys.keyTooltip && /passive|\/[a-z]+p_tooltip/i.test(keys.keyTooltip)) score += 20;
+    if (lowPath.includes("passiveability")) score += 15;
+    if (lowPath.includes("passive") || lowName.includes("passive")) score += 10;
+    if (blob.includes("passive")) score += 10;
+    if (/[qwer]ability\/.*passive|[qwer]passive|spellpassive|[qwer]_passive/.test(lowPath)) score -= 50;
+    if (/missile|attack|manager|skin|counter|channel|ammo|indicator/.test(lowName)) score -= 25;
+  } else if (/missile|attack|manager|skin|buff|icon|rank\d/.test(lowName) && lowName !== sid){
+    score -= 25;
+  }
+  if (keys.keyTooltip) score += 8;
+  if (rec.spell.DataValues && rec.spell.DataValues.length) score += 8;
+  if (rec.spell.mSpellCalculations && Object.keys(rec.spell.mSpellCalculations).length) score += 8;
+  return score;
+}
+
+function findSpell(index, spellId, isPassive, champ){
+  if (!index) return null;
+  const {spells, byEnd} = index;
+  let best = null, bestS = 0;
+  const sid = (spellId||"").toLowerCase();
+  const cands = [];
+  if (sid && byEnd[sid]) cands.push(...byEnd[sid]);
+  if (isPassive && champ){
+    for (const alt of [champ.toLowerCase()+"p", champ.toLowerCase()+"passive"]){
+      if (byEnd[alt]) cands.push(...byEnd[alt]);
+    }
+  }
+  cands.push(...spells);
+  const seen = new Set();
+  for (const rec of cands){
+    if (seen.has(rec.path)) continue;
+    seen.add(rec.path);
+    const s = scoreSpell(rec, spellId, isPassive, champ);
+    if (s > bestS){ bestS = s; best = rec; }
+  }
+  return bestS > 0 ? best : null;
+}
+
+function dvMap(sp){
+  const out = Object.create(null);
+  for (const item of (sp && sp.DataValues) || []){
+    if (!item) continue;
+    const name = item.name || item.mName;
+    const values = item.values || item.mValues;
+    if (!name || !values) continue;
+    const key = String(name).toLowerCase();
+    out[key] = item;
+    out[hashBrace(key)] = item;
+  }
+  return out;
+}
+
+function siblingValues(index, rec){
+  if (!index || !rec) return {};
+  const prefix = rec.path.includes("/") ? rec.path.replace(/\/[^/]+$/, "") : rec.path;
+  const merged = {};
+  for (const other of index.spells){
+    if (other.path === rec.path) continue;
+    if (other.path.startsWith(prefix+"/") || other.path.startsWith(prefix)){
+      const m = dvMap(other.spell);
+      for (const k of Object.keys(m)) if (!merged[k]) merged[k] = m[k];
+    }
+  }
+  return merged;
+}
+
+function Result(ranks, text, bonuses, percent, live){
+  return {ranks: ranks||null, text: text||null, bonuses: bonuses||[], percent: !!percent, live: !!live};
+}
+function resultToString(res){
+  if (!res) return null;
+  const parts = [];
+  if (res.ranks && res.ranks.length){
+    let lst = formatRankList(res.ranks);
+    if (lst != null){
+      if (res.percent && !String(lst).endsWith("%")) lst += "%";
+      parts.push(lst);
+    }
+  } else if (res.text) parts.push(res.text);
+  if (res.bonuses && res.bonuses.length){
+    const seen = new Set(), btxt = [];
+    for (const b of res.bonuses){
+      if (b && !seen.has(b)){ seen.add(b); btxt.push(b); }
+    }
+    if (btxt.length) parts.push("（"+btxt.join("")+"）");
+  }
+  let s = parts.length ? parts.join("") : null;
+  if (s) s = s.replace(/%%/g, "%");
+  return s || null;
+}
+function maybePercentRanks(ranks, display){
+  if (!ranks || !display) return {ranks, percent:false};
+  const mx = Math.max(...ranks.map(v => Math.abs(v)));
+  if (mx <= 2.0001) return {ranks: ranks.map(v => v*100), percent:true};
+  return {ranks, percent:true};
+}
+
+function dvRanks(name, ctx){
+  if (!name) return null;
+  const item = ctx.datavals[String(name).toLowerCase()] || ctx.datavals[hashBrace(String(name).toLowerCase())];
+  if (!item) return null;
+  const values = item.values || item.mValues;
+  if (!values) return null;
+  return pickRanks(values, ctx.maxrank);
+}
+
+function formatBreakpoints(part){
+  const v1 = part.mLevel1Value;
+  if (v1 == null) return null;
+  const init = Number(part.mInitialBonusPerLevel||0);
+  const bps = part.mBreakpoints || [];
+  let levels = [1];
+  for (const bp of bps){
+    const lv = bp.mLevel;
+    if (lv && !levels.includes(lv)) levels.push(lv);
+  }
+  if (!levels.includes(18)) levels.push(18);
+  levels = levels.filter(l => l>=1 && l<=18).sort((a,b)=>a-b);
+  function valueAt(level){
+    let v = Number(v1) + init * (level-1);
+    for (const bp of bps){
+      const lv = Number(bp.mLevel||1);
+      if (level < lv) continue;
+      if (bp.mAdditionalBonusAtThisLevel != null) v += Number(bp.mAdditionalBonusAtThisLevel);
+      if (bp.mBonusPerLevelAtAndAfter != null) v += Number(bp.mBonusPerLevelAtAndAfter) * (level-lv+1);
+    }
+    return v;
+  }
+  let vals = levels.map(valueAt);
+  if (vals.every(v => Math.abs(v-vals[0])<1e-6)) return formatNum(vals[0]);
+  if (levels[levels.length-1]===18 && levels.length>2 && Math.abs(vals[vals.length-1]-vals[vals.length-2])<1e-6){
+    levels = levels.slice(0,-1); vals = vals.slice(0,-1);
+  }
+  return formatRankList(vals)+"（"+levels.join("/")+"级）";
+}
+
+function addResults(a,b){
+  if (!a) return b;
+  if (!b) return a;
+  const aLiveOnly = a.live && !a.ranks && !a.text;
+  const bLiveOnly = b.live && !b.ranks && !b.text;
+  if ((aLiveOnly && b.ranks && !b.bonuses.length) || (bLiveOnly && a.ranks && !a.bonuses.length)){
+    const numeric = a.ranks || b.ranks;
+    if (numeric && numeric.every(v => Math.abs(v+1)<1e-6)) return null;
+  }
+  let ranks = null;
+  if (a.ranks && b.ranks){
+    const n = Math.min(a.ranks.length, b.ranks.length);
+    ranks = [];
+    for (let i=0;i<n;i++) ranks.push(a.ranks[i]+b.ranks[i]);
+  } else ranks = a.ranks || b.ranks;
+  const texts = [a.text,b.text].filter(Boolean);
+  let text = texts.length ? texts.join("+") : null;
+  if (ranks && text && ranks.length>=10) ranks = null;
+  else if (ranks && text){
+    const base = formatRankList(ranks);
+    text = base ? base+"+"+text : text;
+    ranks = null;
+  }
+  return Result(ranks, text, (a.bonuses||[]).concat(b.bonuses||[]), a.percent||b.percent, a.live||b.live);
+}
+
+function multiplyResults(a,b){
+  if (!a || !b) return null;
+  if (a.live || b.live) return null;
+  if (a.ranks && b.ranks){
+    const n = Math.min(a.ranks.length, b.ranks.length);
+    if (a.ranks.every(v => Math.abs(v-a.ranks[0])<1e-9))
+      return Result(b.ranks.slice(0,n).map(v => a.ranks[0]*v), null, (a.bonuses||[]).concat(b.bonuses||[]));
+    if (b.ranks.every(v => Math.abs(v-b.ranks[0])<1e-9))
+      return Result(a.ranks.slice(0,n).map(v => b.ranks[0]*v), null, (a.bonuses||[]).concat(b.bonuses||[]));
+    const ranks=[];
+    for (let i=0;i<n;i++) ranks.push(a.ranks[i]*b.ranks[i]);
+    return Result(ranks, null, (a.bonuses||[]).concat(b.bonuses||[]));
+  }
+  return null;
+}
+
+function applyMultiplier(res, mult, ctx){
+  if (!res || !mult) return res;
+  const ev = (mult && typeof mult === "object") ? evalPart(mult, ctx) : null;
+  if (!ev) return res;
+  if (ev.ranks && ev.ranks.every(v => Math.abs(v-ev.ranks[0])<1e-9) && !ev.bonuses.length && !ev.text){
+    const k = ev.ranks[0];
+    if (res.ranks) return Result(res.ranks.map(v => v*k), res.text, res.bonuses, res.percent, res.live);
+    return res;
+  }
+  return multiplyResults(res, ev);
+}
+
+function evalPart(part, ctx){
+  if (!part || typeof part !== "object") return null;
+  const typ = part.__type || "";
+  const maxrank = ctx.maxrank;
+  if (typ === "NamedDataValueCalculationPart"){
+    const r = dvRanks(part.mDataValue, ctx);
+    return r ? Result(r) : null;
+  }
+  if (typ === "NumberCalculationPart"){
+    if (part.mNumber == null) return null;
+    return Result(Array(maxrank).fill(Number(part.mNumber)));
+  }
+  if (typ === "StatByCoefficientCalculationPart"){
+    const bonus = fmtStatBonus(part.mCoefficient, part.mStat, part.mStatFormula);
+    return Result(null,null, bonus?[bonus]:[], false, true);
+  }
+  if (typ === "StatByNamedDataValueCalculationPart"){
+    const r = dvRanks(part.mDataValue, ctx);
+    if (!r) return null;
+    if (r.every(v => Math.abs(v-r[0])<1e-6)){
+      const bonus = fmtStatBonus(r[0], part.mStat, part.mStatFormula);
+      return Result(null,null, bonus?[bonus]:[]);
+    }
+    const asRatio = r.every(v => Math.abs(v)<=5);
+    const pcts = formatRankList(asRatio ? r.map(v=>v*100) : r);
+    const statName = STAT_CN[part.mStat != null ? part.mStat : 0] || "";
+    const prefix = part.mStatFormula===2?"额外":(part.mStatFormula===1?"基础":"");
+    if (!pcts) return null;
+    return Result(null,null, ["+"+pcts+(asRatio?"%":"")+prefix+statName]);
+  }
+  if (typ === "StatBySubPartCalculationPart"){
+    const sub = evalPart(part.mSubpart, ctx);
+    if (!sub) return null;
+    if (sub.ranks && sub.ranks.every(v => Math.abs(v-sub.ranks[0])<1e-6) && Math.abs(sub.ranks[0])<=5){
+      const bonus = fmtStatBonus(sub.ranks[0], part.mStat, part.mStatFormula);
+      return Result(null,null, bonus?[bonus]:[]);
+    }
+    if (sub.ranks && sub.ranks.every(v => Math.abs(v)<=5)){
+      const statName = STAT_CN[part.mStat != null ? part.mStat : 0] || "";
+      const prefix = part.mStatFormula===2?"额外":(part.mStatFormula===1?"基础":"");
+      const label = prefix+statName;
+      if (sub.ranks.length >= 10){
+        const a = formatNum(sub.ranks[0]*100), b = formatNum(sub.ranks[sub.ranks.length-1]*100);
+        return Result(null,null, ["+"+a+"–"+b+"%"+label+"（随等级）"]);
+      }
+      const pcts = formatRankList(sub.ranks.map(v=>v*100));
+      return Result(null,null, ["+"+pcts+"%"+label]);
+    }
+    return sub;
+  }
+  if (typ === "ByCharLevelInterpolationCalculationPart"){
+    const a = part.mStartValue, b = part.mEndValue;
+    if (a==null && b==null) return null;
+    const sa = formatNum(a!=null?a:b), sb = formatNum(b!=null?b:a);
+    if (sa==null) return null;
+    if (sa===sb) return Result(null, sa);
+    return Result(null, sa+"–"+sb+"（1-18级）");
+  }
+  if (typ === "ByCharLevelFormulaCalculationPart"){
+    let arr = (part.values||[]).map(Number);
+    if (!arr.length) return null;
+    if ((arr.length===19||arr.length===31) && (arr[0]===0 || Math.abs(arr[0]-arr[1])<1e-12)) arr = arr.slice(1);
+    if (arr.length>=10){
+      const sa=formatNum(arr[0]), sb=formatNum(arr[arr.length-1]);
+      if (sa===sb) return Result(arr, sa);
+      return Result(arr, sa+"–"+sb+"（随等级）");
+    }
+    const r = pickRanks(arr, maxrank);
+    return r.length ? Result(r) : null;
+  }
+  if (typ === "ByCharLevelBreakpointsCalculationPart"){
+    const text = formatBreakpoints(part);
+    return text ? Result(null,text) : null;
+  }
+  if (typ === "ProductOfSubPartsCalculationPart")
+    return multiplyResults(evalPart(part.mPart1, ctx), evalPart(part.mPart2, ctx));
+  if (typ === "SumOfSubPartsCalculationPart"){
+    let acc=null;
+    for (const sub of (part.mSubparts||[])) acc = addResults(acc, evalPart(sub, ctx));
+    return acc;
+  }
+  if (typ === "ClampSubPartsCalculationPart"){
+    let acc=null;
+    for (const sub of (part.mSubparts||[])) acc = addResults(acc, evalPart(sub, ctx));
+    if (acc && acc.ranks){
+      const lo=part.mFloor, hi=part.mCeiling;
+      acc.ranks = acc.ranks.map(v => {
+        if (lo!=null) v=Math.max(v, Number(lo));
+        if (hi!=null) v=Math.min(v, Number(hi));
+        return v;
+      });
+    }
+    return acc;
+  }
+  if (typ === "BuffCounterByNamedDataValueCalculationPart" || typ === "BuffCounterByCoefficientCalculationPart"){
+    let unit=null;
+    if (typ === "BuffCounterByNamedDataValueCalculationPart"){
+      const r=dvRanks(part.mDataValue, ctx);
+      unit = r ? formatRankList(r) : null;
+    } else unit = formatNum(part.mCoefficient);
+    if (!unit) return null;
+    return Result(null, "每层×"+unit);
+  }
+  if (typ === "AbilityResourceByCoefficientCalculationPart"){
+    const resName = ctx.partype || "法力值";
+    const c = part.mCoefficient;
+    if (c==null) return null;
+    if (Math.abs(Number(c))<=5) return Result(null,null,["+"+formatNum(Number(c)*100)+"%"+resName]);
+    return Result(null,null,["+"+formatNum(c)+resName]);
+  }
+  if (typ === "EffectValueCalculationPart"){
+    const idx=part.mEffectIndex;
+    const burns=ctx.effectBurn||[];
+    if (idx!=null && idx<burns.length && burns[idx] && String(burns[idx])!=="0" && burns[idx]!=="None")
+      return Result(null, String(burns[idx]));
+    return null;
+  }
+  if (typ === "CooldownMultiplierCalculationPart" || typ === "PercentageOfBuffNameElapsed") return null;
+  if (typ === "{f3cbe7b2}" || part.mSpellCalculationKey){
+    const key=part.mSpellCalculationKey;
+    if (key){
+      for (const k of Object.keys(ctx.calcs||{})){
+        if (k.toLowerCase()===String(key).toLowerCase())
+          return evalCalc(ctx.calcs[k], ctx);
+      }
+    }
+    return null;
+  }
+  if (typ === "{ee18a47b}"){
+    const a=dvRanks(part.StartDataValue, ctx), b=dvRanks(part.EndDataValue, ctx);
+    const sa=a?formatRankList(a):null, sb=b?formatRankList(b):null;
+    if (sa && sb && sa!==sb) return Result(null, sa+"–"+sb+"（随等级）");
+    return (sa||sb) ? Result(null, sa||sb) : null;
+  }
+  if (typ === "{b22609db}"){
+    const br=dvRanks(part["{91d404a5}"], ctx), pr=dvRanks(part["{b2cd0eb0}"], ctx);
+    const b0=br?formatRankList(br):null, p0=pr?formatRankList(pr):null;
+    if (b0 && p0) return Result(null, b0+"+每级"+p0);
+    return (b0||p0)?Result(null,b0||p0):null;
+  }
+  if (typ === "{4ce08984}"){
+    const r=dvRanks(part["{91d404a5}"], ctx);
+    const pr=dvRanks(part["{bbd778a2}"], ctx);
+    if (r && pr) return Result(null, formatNum(r[0])+"+每级"+formatNum(pr[0]));
+    return r ? Result(r) : null;
+  }
+  return null;
+}
+
+function evalCalc(calc, ctx, visiting){
+  if (!calc || typeof calc !== "object") return null;
+  const typ = calc.__type || "";
+  visiting = visiting || new Set();
+  if (visiting.has(calc)) return null;
+  const next = new Set(visiting); next.add(calc);
+  const subCtx = Object.assign({}, ctx, {_vis: next});
+
+  if (typ === "GameCalculationModified"){
+    let base=null;
+    const key=calc.mModifiedGameCalculation;
+    if (key){
+      for (const k of Object.keys(ctx.calcs||{})){
+        if (k.toLowerCase()===String(key).toLowerCase()){ base=ctx.calcs[k]; break; }
+      }
+    }
+    let res = base ? evalCalc(base, subCtx, next) : null;
+    res = applyMultiplier(res, calc.mMultiplier, subCtx);
+    if (res && calc.mDisplayAsPercent && res.ranks){
+      const p=maybePercentRanks(res.ranks,true); res.ranks=p.ranks; res.percent=p.percent;
+    }
+    return res;
+  }
+  if (typ === "GameCalculationConditional"){
+    const lookup=name=>{
+      if (!name) return null;
+      for (const k of Object.keys(ctx.calcs||{})){
+        if (k.toLowerCase()===String(name).toLowerCase()) return evalCalc(ctx.calcs[k], subCtx, next);
+      }
+      return null;
+    };
+    const res=lookup(calc.mDefaultGameCalculation);
+    if (res && resultToString(res)) return res;
+    return lookup(calc.mConditionalGameCalculation);
+  }
+  if (typ && typ !== "GameCalculation") return evalPart(calc, subCtx);
+  let acc=null;
+  for (const part of (calc.mFormulaParts||[])) acc=addResults(acc, evalPart(part, subCtx));
+  acc=applyMultiplier(acc, calc.mMultiplier, subCtx);
+  if (acc && calc.mDisplayAsPercent && acc.ranks){
+    const p=maybePercentRanks(acc.ranks,true); acc.ranks=p.ranks; acc.percent=p.percent;
+  }
+  return acc;
+}
+
+const TOKEN_RE = /\{\{\s*([^{}]+?)\s*\}\}|@([A-Za-z_][\w:\.]*(?:\s*[*/]\s*-?[\d.]+)?)@/g;
+const EXPR_RE = /^([A-Za-z_][\w:]*(?:\.[A-Za-z_][\w:]*)*)(?:\.(\d))?(?:\s*([*/])\s*(-?[\d.]+))?$/;
+
+function applyExpr(val, op, factor){
+  if (val==null) return null;
+  const fac=Number(factor);
+  const applyOne=v => op==="*" ? v*fac : (fac? v/fac : null);
+  if (Array.isArray(val)){
+    const out=val.map(applyOne);
+    if (out.some(x=>x==null)) return null;
+    return formatRankList(out);
+  }
+  let s=String(val);
+  const hadPct=s.endsWith("%");
+  const core=hadPct?s.slice(0,-1):s;
+  if (/^-?[\d.]+$/.test(core)){
+    const t=formatNum(applyOne(Number(core)));
+    return t==null?null:(hadPct?t+"%":t);
+  }
+  if (core.includes("/")){
+    const parts=core.split("/");
+    const vals=[];
+    for (const p of parts){
+      if (!/^-?[\d.]+$/.test(p)) return null;
+      vals.push(applyOne(Number(p)));
+    }
+    const t=formatRankList(vals);
+    return t==null?null:(hadPct?t+"%":t);
+  }
+  const m=core.match(/^(-?[\d.]+)–(-?[\d.]+)(.*)$/);
+  if (m){
+    const t=formatNum(applyOne(Number(m[1])))+"–"+formatNum(applyOne(Number(m[2])))+m[3];
+    return hadPct?t+"%":t;
+  }
+  return null;
+}
+
+function resolveName(name, ctx){
+  const n=String(name).trim();
+  const low=n.toLowerCase();
+  if (DROP_TOKENS[low]) return "";
+  if (low==="abilityresourcename") return ctx.partype || "法力值";
+  if (low==="cost" && ctx.costBurn) return ctx.costBurn;
+  if ((low==="cooldown"||low==="cooldownburn") && ctx.cooldownBurn) return ctx.cooldownBurn;
+  if ((low==="range"||low==="rangeburn") && ctx.rangeBurn) return ctx.rangeBurn;
+  if ((low==="ammorechargetime"||low==="chargecooldown"||low==="ammo_recharge_time") && ctx.ammoRecharge) return ctx.ammoRecharge;
+  const emAmt=low.match(/^effect(\d+)amount$/);
+  if (emAmt) return resolveName("e"+emAmt[1], ctx);
+
+  const eM=low.match(/^e(\d+)$/);
+  if (eM){
+    const idx=Number(eM[1]), burns=ctx.effectBurn||[];
+    if (idx<burns.length && burns[idx]!=null && burns[idx]!=="" && burns[idx]!=="0" && burns[idx]!=="None")
+      return String(burns[idx]);
+    return null;
+  }
+  if (/^f\d+(?:\.\d+)?$/.test(low)) return null;
+
+  const xref=n.match(/^spell\.([A-Za-z_][\w]*)[:.]([A-Za-z_][\w]*)$/i);
+  if (xref) return resolveFromOtherSpell(xref[1], xref[2], ctx);
+
+  const calcs=ctx.calcs||{};
+  for (const k of Object.keys(calcs)){
+    if (k.toLowerCase()===low || hashBrace(k.toLowerCase())===low){
+      const res=evalCalc(calcs[k], ctx);
+      const s=res?resultToString(res):null;
+      if (s) return s;
+      break;
+    }
+  }
+  function fromItem(item){
+    if (!item) return null;
+    const values=item.values||item.mValues;
+    if (!values) return null;
+    return formatRankList(pickRanks(values, ctx.maxrank));
+  }
+  let s=fromItem((ctx.datavals||{})[low] || (ctx.datavals||{})[hashBrace(low)]);
+  if (s) return s;
+  s=fromItem((ctx.siblings||{})[low] || (ctx.siblings||{})[hashBrace(low)]);
+  if (s) return s;
+  if ((low==="cooldown"||low==="cooldownburn") && ctx.binCooldown) return ctx.binCooldown;
+  if ((low==="ammorechargetime"||low==="chargecooldown") && ctx.ammoRecharge) return ctx.ammoRecharge;
+  return null;
+}
+
+function resolveFromOtherSpell(otherId, key, ctx){
+  if (!ctx.index) return null;
+  let rec=findSpell(ctx.index, otherId, /passive/i.test(otherId), ctx.champ);
+  if (!rec) rec=findSpell(ctx.index, otherId, true, ctx.champ);
+  if (!rec) return null;
+  const sub=makeCtxFromRec(rec, ctx);
+  return resolveName(key, sub);
+}
+
+function listFromBinField(sp, field, maxrank){
+  if (!sp || sp[field]==null) return null;
+  const raw=sp[field];
+  let vals=null;
+  if (Array.isArray(raw)) vals=raw;
+  else if (raw && typeof raw==="object" && Array.isArray(raw.values)) vals=raw.values;
+  if (!vals || !vals.length) return null;
+  return formatRankList(pickRanks(vals, maxrank>1?maxrank:5));
+}
+
+function makeCtxFromRec(rec, base){
+  const sp=rec.spell;
+  const ctx=Object.assign({}, base);
+  ctx.datavals=Object.assign({}, base.siblings||{}, dvMap(sp));
+  ctx.calcs=sp.mSpellCalculations||{};
+  ctx.siblings=siblingValues(base.index, rec);
+  ctx.ammoRecharge=listFromBinField(sp,"mAmmoRechargeTime", ctx.maxrank)||listFromBinField(sp,"ammoRechargeTime", ctx.maxrank);
+  ctx.binCooldown=listFromBinField(sp,"Cooldown", ctx.maxrank)||listFromBinField(sp,"cooldownTime", ctx.maxrank);
+  return ctx;
+}
+
+function makeCtx(ddSpell, rec, index, partype, isPassive, champ){
+  const maxrank = isPassive ? 1 : ((ddSpell && ddSpell.maxrank) || 5);
+  const sp = rec ? rec.spell : {};
+  const costBurn = ddSpell && ddSpell.costBurn;
+  const cdBurn = ddSpell && ddSpell.cooldownBurn;
+  const rangeBurn = ddSpell && ddSpell.rangeBurn;
+  const ctx = {
+    maxrank,
+    costBurn: (costBurn!=null && costBurn!=="") ? String(costBurn) : null,
+    cooldownBurn: (cdBurn!=null && cdBurn!=="") ? String(cdBurn) : null,
+    rangeBurn: (rangeBurn!=null && rangeBurn!=="" && String(rangeBurn)!=="0") ? String(rangeBurn) : null,
+    partype: partype||"法力值",
+    effectBurn: (ddSpell && ddSpell.effectBurn) || [],
+    datavals: dvMap(sp),
+    calcs: (sp && sp.mSpellCalculations) || {},
+    siblings: rec ? siblingValues(index, rec) : {},
+    index, champ,
+    ammoRecharge: listFromBinField(sp,"mAmmoRechargeTime", maxrank)||listFromBinField(sp,"ammoRechargeTime", maxrank),
+    binCooldown: listFromBinField(sp,"Cooldown", maxrank)||listFromBinField(sp,"cooldownTime", maxrank)
+  };
+  return ctx;
+}
+
+function interpolateText(text, ctx){
+  if (!text) return {text:"", leftover:[]};
+  const leftover=[];
+  const out=String(text).replace(TOKEN_RE, (m, a, b) => {
+    const raw=(a!=null?a:b).trim();
+    const em=raw.match(EXPR_RE);
+    if (!em){ leftover.push(raw); return ""; }
+    const ident=em[1], op=em[3], fac=em[4];
+    const val=resolveName(ident, ctx);
+    if (val==null){ leftover.push(raw); return ""; }
+    if (op && fac!=null){
+      const applied=applyExpr(val, op, fac);
+      if (applied==null){ leftover.push(raw); return ""; }
+      return applied;
+    }
+    return val;
+  });
+  return {text:out, leftover};
+}
+
+function cleanMarkup(text){
+  if (!text) return "";
+  let s=String(text);
+  s=s.replace(/%i:[^%]+%/gi, "");
+  s=s.replace(/<br\s*\/?>/gi, "\n");
+  s=s.replace(/<\/p>/gi, "\n");
+  s=s.replace(/<li[^>]*>/gi, "• ");
+  s=s.replace(/<\/li>/gi, "\n");
+  s=s.replace(/<\/?[a-zA-Z0-9]+(?:\s[^>]*)?>/g, "");
+  s=s.replace(/\{\{[^}]*\}\}|@[A-Za-z_][\w:.\*\/\-]*@/g, "");
+  s=s.replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,"\"");
+  s=s.replace(/到\s*\+/g, "到").replace(/\+\s*%/g, "").replace(/（\s*）/g,"").replace(/\(\s*\)/g,"").replace(/【\s*】/g,"");
+  s=s.replace(/[ \t]+([，。、；：%））])/g,"$1");
+  s=s.replace(/（\+/g,"（");
+  s=s.replace(/[ \t]{2,}/g," ");
+  s=s.replace(/ *\n */g,"\n");
+  s=s.replace(/\n{3,}/g,"\n\n");
+  s=s.replace(/%\s+\)/g, "%)");
+  s=s.replace(/（\s*秒充能时间）/g,"");
+  s=s.replace(/\(\s*秒充能时间\)/g,"");
+  s=s.replace(/充能时间为秒。/g,"充能时间。");
+  return s.trim();
+}
+
+function buildSkillTip(pack, slot, ddObj, isPassive){
+  const rec = pack.index
+    ? findSpell(pack.index, isPassive ? pack.dd+"Passive" : (ddObj && ddObj.id) || (pack.dd+slot), isPassive, pack.dd)
+    : null;
+  const ctx = makeCtx(isPassive?{}:ddObj, rec, pack.index, pack.partype, isPassive, pack.dd);
+  if (isPassive){ ctx.costBurn=null; ctx.cooldownBurn=null; ctx.rangeBurn=null; }
+  const src = isPassive
+    ? (PASSIVE_TIPS[pack.dd] || (ddObj && (ddObj.tooltip||ddObj.description)) || "")
+    : ((ddObj && (ddObj.tooltip||ddObj.description)) || "");
+  const interp=interpolateText(src, ctx);
+  let text=cleanMarkup(interp.text);
+  if (!text && ddObj && ddObj.description) text=cleanMarkup(ddObj.description);
+  const meta=[];
+  if (!isPassive){
+    const cdIsZero = !ctx.cooldownBurn || /^0+(\/0+)*$/.test(String(ctx.cooldownBurn));
+    if (ctx.cooldownBurn && !cdIsZero) meta.push("冷却 "+ctx.cooldownBurn);
+    const cost=ctx.costBurn, partype=ctx.partype||"";
+    const costIsZero = !cost || /^0+(\/0+)*$/.test(String(cost));
+    if (partype==="无"||partype==="无消耗") meta.push("无消耗");
+    else if (cost && !costIsZero) meta.push("消耗 "+cost+partype);
+    if (ctx.rangeBurn && ctx.rangeBurn!=="25000") meta.push("范围 "+ctx.rangeBurn);
+  }
+  return {name: (ddObj && ddObj.name) || "", meta: meta.join(" · "), text, leftover: interp.leftover};
+}
+
+function formatItemTip(it, displayName){
+  if (!it) return {name: displayName||"", meta:"", text: displayName||""};
+  let desc=it.description||"";
+  desc=desc.replace(/<\/(stats|passive|active)>/gi, "\n");
+  desc=desc.replace(/<(passive|active)(?:\s[^>]*)?>/gi, "");
+  const text=cleanMarkup(desc);
+  const meta=[];
+  if (it.gold){
+    if (it.gold.total) meta.push("总价 "+it.gold.total);
+    if (it.gold.sell) meta.push("售价 "+it.gold.sell);
+  }
+  const body = text || cleanMarkup(it.plaintext||"") || (it.name||displayName||"");
+  return {name: it.name||displayName||"", meta: meta.join(" · "), text: body};
+}
+
 
 const grid = document.getElementById("grid");
 const hexCatalog = document.getElementById("hexCatalog");
@@ -312,10 +1028,10 @@ function itemCell(name, cls){
   const id = lookupItemId(name);
   if (id){
     itemHit++;
-    return `<div class="item ${cls||""}"><img src="${itemIcon(id)}" alt="${esc(name)}" loading="lazy"/><span class="tipname">${esc(name)}</span></div>`;
+    return `<div class="item ${cls||""}" data-tip-kind="item" data-item-id="${esc(id)}" data-item-name="${esc(name)}"><img src="${itemIcon(id)}" alt="${esc(name)}" loading="lazy"/></div>`;
   }
   itemMiss++;
-  return `<div class="item ${cls||""}"><div class="fallback" title="${esc(name)}">${esc(name)}</div><span class="tipname">${esc(name)}</span></div>`;
+  return `<div class="item ${cls||""}" data-tip-kind="item" data-item-name="${esc(name)}"><div class="fallback">${esc(name)}</div></div>`;
 }
 
 function itemRow(names, cls, {split=true, arrows=true}={}){
@@ -418,12 +1134,15 @@ async function loadItems(){
     const res = await fetch(`${DD}/data/zh_CN/item.json`);
     const data = await res.json();
     const map = Object.create(null);
+    const byId = Object.create(null);
     for (const [iid, it] of Object.entries(data.data||{})){
+      byId[iid] = it;
       const name = it.name;
       if (!name) continue;
       if (!map[name] || String(iid).length <= String(map[name]).length) map[name] = iid;
     }
     itemNameToId = map;
+    itemById = byId;
     itemReady = true;
   }catch(e){
     console.warn("item.json load failed", e);
@@ -433,13 +1152,26 @@ async function loadItems(){
 
 async function loadSkills(dd){
   if (skillCache[dd]) return skillCache[dd];
-  const res = await fetch(`${DD}/data/zh_CN/champion/${dd}.json`);
-  const data = await res.json();
+  const binUrl = `https://raw.communitydragon.org/${CDRAGON_PATCH}/game/data/characters/${String(dd).toLowerCase()}/${String(dd).toLowerCase()}.bin.json`;
+  const [ddRes, binRes] = await Promise.all([
+    fetch(`${DD}/data/zh_CN/champion/${dd}.json`),
+    fetch(binUrl).then(r => r.ok ? r.json() : null).catch(() => null)
+  ]);
+  const data = await ddRes.json();
   const c = data.data[dd];
   const pack = {
+    dd,
+    partype: c.partype || "法力值",
     passive: c.passive,
-    spells: c.spells
+    spells: c.spells,
+    index: binRes ? indexBin(binRes) : null,
+    tips: {}
   };
+  pack.tips.P = buildSkillTip(pack, "P", c.passive, true);
+  (c.spells||[]).forEach((sp,i) => {
+    const k = "QWER"[i];
+    if (k) pack.tips[k] = buildSkillTip(pack, k, sp, false);
+  });
   skillCache[dd] = pack;
   return pack;
 }
@@ -450,11 +1182,12 @@ function renderSkills(pack, skillText){
   const orderInfo = parseSkillOrder(skillText);
   const nodes = [];
   const p = pack.passive;
-  nodes.push(`<div class="skill"><img src="${spellIcon(p.image.full,"passive")}" alt="P"/><div class="k">P</div><div class="n" title="${esc(p.name)}">${esc(p.name)}</div></div>`);
+  const dd = pack.dd || "";
+  nodes.push(`<div class="skill" data-tip-kind="skill" data-dd="${esc(dd)}" data-slot="P" tabindex="0"><img src="${spellIcon(p.image.full,"passive")}" alt="P ${esc(p.name)}"/><div class="k">P</div><div class="n">${esc(p.name)}</div></div>`);
   pack.spells.forEach((sp,i)=>{
     const k = keys[i+1];
     const hi = orderInfo.highlight.includes(k);
-    nodes.push(`<div class="skill" style="${hi?'outline:1px solid rgba(10,200,185,.55);border-radius:12px;padding:4px 2px':''}"><img src="${spellIcon(sp.image.full,"spell")}" alt="${k}"/><div class="k">${k}${hi?' ★':''}</div><div class="n" title="${esc(sp.name)}">${esc(sp.name)}</div></div>`);
+    nodes.push(`<div class="skill" data-tip-kind="skill" data-dd="${esc(dd)}" data-slot="${k}" tabindex="0" style="${hi?'outline:1px solid rgba(10,200,185,.55);border-radius:12px;padding:4px 2px':''}"><img src="${spellIcon(sp.image.full,"spell")}" alt="${k} ${esc(sp.name)}"/><div class="k">${k}${hi?' ★':''}</div><div class="n">${esc(sp.name)}</div></div>`);
   });
   return `<div class="skills">${nodes.join("")}</div><div class="skill-order">加点：${esc(skillText||"—")}</div>`;
 }
@@ -506,7 +1239,7 @@ async function openHero(h){
 }
 
 function closeDrawer(){
-  hideHexFloatTip();
+  hideFloatTip();
   drawer.classList.remove("show");
   overlay.classList.remove("show");
 }
@@ -583,107 +1316,179 @@ function render(){
 
 q.addEventListener("input", () => { query = q.value.trim(); render(); });
 
-const hexFloatTip = document.createElement("div");
-hexFloatTip.id = "hexFloatTip";
-hexFloatTip.setAttribute("role", "tooltip");
-document.body.appendChild(hexFloatTip);
+/* ===== shared floating tip (hex / skill / item) ===== */
+const floatTip = document.createElement("div");
+floatTip.id = "floatTip";
+floatTip.setAttribute("role", "tooltip");
+document.body.appendChild(floatTip);
 
-let hexTipAnchor = null;
+let tipAnchor = null;
+let hideTimer = null;
 
-function fillHexFloatTip(a, extra){
-  const meta = [a.en, rarityLabel(a.rarity)].concat(extra ? [extra] : []).join(" · ");
-  const desc = a.desc ? `<div class="t-desc">${esc(a.desc)}</div>` : "";
-  hexFloatTip.innerHTML = `<div class="t-name">${esc(a.cn)}</div><div class="t-meta">${esc(meta)}</div>${desc}`;
+function cancelHideTip(){
+  if (hideTimer){ clearTimeout(hideTimer); hideTimer = null; }
 }
 
-function hideHexFloatTip(){
-  hexTipAnchor = null;
-  hexFloatTip.classList.remove("is-show");
-  hexFloatTip.innerHTML = "";
+function hideFloatTip(){
+  cancelHideTip();
+  tipAnchor = null;
+  floatTip.classList.remove("is-show", "is-scroll");
+  floatTip.style.pointerEvents = "none";
+  floatTip.style.maxHeight = "";
+  floatTip.innerHTML = "";
 }
 
-function positionHexFloatTip(anchor){
-  if (!anchor || !hexFloatTip.classList.contains("is-show")) return;
+function fillFloatTip(name, meta, desc){
+  const descHtml = desc ? `<div class="t-desc">${esc(desc)}</div>` : "";
+  const metaHtml = meta ? `<div class="t-meta">${esc(meta)}</div>` : "";
+  floatTip.innerHTML = `<div class="t-name">${esc(name||"")}</div>${metaHtml}${descHtml}`;
+}
+
+function positionFloatTip(anchor){
+  if (!anchor || !floatTip.classList.contains("is-show")) return;
   const margin = 8, gap = 8;
-  const rect = anchor.getBoundingClientRect();
-  hexFloatTip.style.left = "0px";
-  hexFloatTip.style.top = "0px";
-  const tipRect = hexFloatTip.getBoundingClientRect();
   const vw = window.innerWidth, vh = window.innerHeight;
-  let top = rect.bottom + gap;
-  if (top + tipRect.height > vh - margin){
-    const above = rect.top - gap - tipRect.height;
-    if (above >= margin) top = above;
-    else {
-      const spaceBelow = vh - margin - (rect.bottom + gap);
-      const spaceAbove = rect.top - gap - margin;
-      top = spaceBelow >= spaceAbove
-        ? Math.min(rect.bottom + gap, Math.max(margin, vh - margin - tipRect.height))
-        : Math.max(margin, rect.top - gap - tipRect.height);
-      top = Math.max(margin, Math.min(top, vh - margin - tipRect.height));
-    }
+  const maxW = Math.min(360, vw - margin*2);
+  floatTip.style.maxWidth = maxW + "px";
+  floatTip.style.left = "0px";
+  floatTip.style.top = "0px";
+  floatTip.style.maxHeight = (vh - margin*2) + "px";
+  const rect = anchor.getBoundingClientRect();
+  const spaceBelow = vh - margin - (rect.bottom + gap);
+  const spaceAbove = rect.top - gap - margin;
+  const natural = floatTip.scrollHeight;
+  let placeBelow = true;
+  if (natural > spaceBelow && spaceAbove > spaceBelow) placeBelow = false;
+  const avail = Math.max(48, placeBelow ? spaceBelow : spaceAbove);
+  floatTip.style.maxHeight = avail + "px";
+  const needScroll = floatTip.scrollHeight > avail + 1;
+  if (needScroll){
+    floatTip.classList.add("is-scroll");
+    floatTip.style.pointerEvents = "auto";
+  } else {
+    floatTip.classList.remove("is-scroll");
+    floatTip.style.pointerEvents = "none";
   }
-  let left = rect.left + rect.width / 2 - tipRect.width / 2;
+  const tipRect = floatTip.getBoundingClientRect();
+  let left = rect.left + rect.width/2 - tipRect.width/2;
   left = Math.max(margin, Math.min(left, vw - margin - tipRect.width));
-  hexFloatTip.style.left = Math.round(left) + "px";
-  hexFloatTip.style.top = Math.round(top) + "px";
+  let top = placeBelow ? rect.bottom + gap : rect.top - gap - tipRect.height;
+  top = Math.max(margin, Math.min(top, vh - margin - tipRect.height));
+  floatTip.style.left = Math.round(left) + "px";
+  floatTip.style.top = Math.round(top) + "px";
 }
 
-function showHexFloatTip(anchor){
-  const a = HEX_BY_ID[anchor.dataset.hexId];
-  if (!a) return;
-  const extra = anchor.classList.contains("prio-must") ? PRIO_META.must.label
-    : anchor.classList.contains("prio-good") ? PRIO_META.good.label
-    : anchor.classList.contains("prio-avoid") ? PRIO_META.avoid.label
-    : "";
-  hexTipAnchor = anchor;
-  fillHexFloatTip(a, extra);
-  hexFloatTip.classList.add("is-show");
-  positionHexFloatTip(anchor);
+function tipPayload(anchor){
+  if (!anchor) return null;
+  if (anchor.dataset.hexId){
+    const a = HEX_BY_ID[anchor.dataset.hexId];
+    if (!a) return null;
+    const extra = anchor.classList.contains("prio-must") ? PRIO_META.must.label
+      : anchor.classList.contains("prio-good") ? PRIO_META.good.label
+      : anchor.classList.contains("prio-avoid") ? PRIO_META.avoid.label
+      : "";
+    const meta = [a.en, rarityLabel(a.rarity)].concat(extra ? [extra] : []).join(" · ");
+    return {name: a.cn, meta, desc: a.desc || ""};
+  }
+  if (anchor.dataset.tipKind === "skill"){
+    const pack = skillCache[anchor.dataset.dd];
+    const tip = pack && pack.tips && pack.tips[anchor.dataset.slot];
+    if (!tip) return null;
+    const slot = anchor.dataset.slot || "";
+    const name = (slot ? slot+" " : "") + (tip.name||"");
+    return {name, meta: tip.meta||"", desc: tip.text||""};
+  }
+  if (anchor.dataset.tipKind === "item"){
+    const id = anchor.dataset.itemId;
+    const display = anchor.dataset.itemName || "";
+    const it = (id && itemById[id]) || null;
+    const tip = formatItemTip(it, display);
+    return {name: tip.name, meta: tip.meta, desc: tip.text};
+  }
+  return null;
 }
 
-function hexFromEvent(e){
-  const el = e.target && e.target.closest && e.target.closest(".hex-tile, .hex-card");
-  return (el && el.dataset.hexId) ? el : null;
+function showFloatTip(anchor){
+  const payload = tipPayload(anchor);
+  if (!payload) return;
+  cancelHideTip();
+  tipAnchor = anchor;
+  fillFloatTip(payload.name, payload.meta, payload.desc);
+  floatTip.classList.add("is-show");
+  positionFloatTip(anchor);
+}
+
+function tipFromEvent(e){
+  const el = e.target && e.target.closest && e.target.closest("[data-tip-kind], .hex-tile, .hex-card");
+  if (!el) return null;
+  if (el.dataset.hexId || el.dataset.tipKind) return el;
+  return null;
+}
+
+function relatedInside(el, rel){
+  return rel && ((el && el.contains && el.contains(rel)) || (floatTip.contains && floatTip.contains(rel)));
 }
 
 document.addEventListener("pointerover", e => {
-  const el = hexFromEvent(e);
-  if (el) showHexFloatTip(el);
+  if (e.target === floatTip || (floatTip.contains && floatTip.contains(e.target))){
+    cancelHideTip();
+    return;
+  }
+  const el = tipFromEvent(e);
+  if (el) showFloatTip(el);
 }, true);
 
 document.addEventListener("pointerout", e => {
-  const el = hexFromEvent(e);
-  if (!el || e.pointerType === "touch") return;
+  if (e.pointerType === "touch") return;
   const rel = e.relatedTarget;
-  if (rel && el.contains(rel)) return;
-  if (hexTipAnchor === el) hideHexFloatTip();
+  if (e.target === floatTip || (floatTip.contains && floatTip.contains(e.target))){
+    if (relatedInside(tipAnchor, rel)) return;
+    hideFloatTip();
+    return;
+  }
+  const el = tipFromEvent(e);
+  if (!el) return;
+  if (relatedInside(el, rel)) return;
+  if (tipAnchor !== el) return;
+  if (floatTip.classList.contains("is-scroll")){
+    cancelHideTip();
+    hideTimer = setTimeout(() => {
+      if (tipAnchor === el) hideFloatTip();
+    }, 180);
+  } else {
+    hideFloatTip();
+  }
 }, true);
 
 document.addEventListener("pointermove", e => {
-  if (hexTipAnchor) positionHexFloatTip(hexTipAnchor);
+  if (tipAnchor && !(floatTip.contains && floatTip.contains(e.target)))
+    positionFloatTip(tipAnchor);
 }, true);
 
 document.addEventListener("pointerup", e => {
   if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
-  const el = hexFromEvent(e);
+  if (floatTip.contains && floatTip.contains(e.target)) return;
+  const el = tipFromEvent(e);
   if (el){
-    if (hexTipAnchor === el && hexFloatTip.classList.contains("is-show")) hideHexFloatTip();
-    else showHexFloatTip(el);
+    if (tipAnchor === el && floatTip.classList.contains("is-show")) hideFloatTip();
+    else showFloatTip(el);
   } else {
-    hideHexFloatTip();
+    hideFloatTip();
   }
 }, true);
 
 window.addEventListener("scroll", () => {
-  if (hexTipAnchor && document.contains(hexTipAnchor)) positionHexFloatTip(hexTipAnchor);
-  else if (hexTipAnchor) hideHexFloatTip();
+  if (tipAnchor && document.contains(tipAnchor)) positionFloatTip(tipAnchor);
+  else if (tipAnchor) hideFloatTip();
 }, true);
 
 window.addEventListener("resize", () => {
-  if (hexTipAnchor && document.contains(hexTipAnchor)) positionHexFloatTip(hexTipAnchor);
-  else if (hexTipAnchor) hideHexFloatTip();
+  if (tipAnchor && document.contains(tipAnchor)) positionFloatTip(tipAnchor);
+  else if (tipAnchor) hideFloatTip();
 });
+
+floatTip.addEventListener("pointerenter", cancelHideTip);
+floatTip.addEventListener("wheel", e => { e.stopPropagation(); }, {passive:true});
 
 (async function init(){
   buildFilters();
